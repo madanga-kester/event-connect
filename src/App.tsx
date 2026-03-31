@@ -4,11 +4,13 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/hooks/use-theme";
+
 import Index from "./pages/Index.tsx";
 import Groups from "./pages/Groups.tsx";
 import MapView from "./pages/MapView.tsx";
 import Interests from "./pages/Interests.tsx";
 import Login from "./pages/Login.tsx";
+import AdminLogin from "./pages/AdminLogin.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -21,12 +23,15 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
+            {/* Public Routes */}
             <Route path="/" element={<Index />} />
             <Route path="/groups" element={<Groups />} />
             <Route path="/map" element={<MapView />} />
             <Route path="/interests" element={<Interests />} />
             <Route path="/login" element={<Login />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="/admin-login" element={<AdminLogin />} />
+
+            {/* Catch-all route (MUST be last) */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
