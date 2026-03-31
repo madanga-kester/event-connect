@@ -13,7 +13,7 @@ const Navbar = () => {
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-2">
           <span className="text-gradient font-display text-xl font-bold tracking-tight">
-            Eventora
+            Eventora/ LinkUp254
           </span>
         </Link>
 
