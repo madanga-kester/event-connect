@@ -34,10 +34,10 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [lastSentOtp, setLastSentOtp] = useState<string | null>(null); // DEV ONLY
+  const [lastSentOtp, setLastSentOtp] = useState<string | null>(null);
   const [otpPurpose, setOtpPurpose] = useState<OtpPurpose>("Signup");
   const [otpIdentifier, setOtpIdentifier] = useState<string>("");
-
+  const [signupEmail, setSignupEmail] = useState<string>("");
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -91,6 +91,24 @@ const Login = () => {
     resetForm();
   };
 
+  // ✅ Helper: Check interests and redirect AFTER sign in
+  const checkAndRedirect = async (token: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/interest/has-interests`, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const result = await response.json();
+        navigate(result.hasInterests ? "/" : "/interests");
+      } else {
+        navigate("/");
+      }
+    } catch (err) {
+      console.error("Interest check failed:", err);
+      navigate("/");
+    }
+  };
+
   // ==================== API CALLS ====================
 
   const handleSignup = async () => {
@@ -130,6 +148,7 @@ const Login = () => {
       setOtpPurpose("Signup");
       setSuccessMessage(`Verification code sent to ${contactValue}`);
       setAuthMode("verify-otp");
+      
     } catch (err: any) {
       setError(err.message || "Signup failed");
     } finally {
@@ -167,7 +186,8 @@ const Login = () => {
       if (result.refreshToken) localStorage.setItem("refresh_token", result.refreshToken);
       if (result.user) localStorage.setItem("user", JSON.stringify(result.user));
 
-      navigate("/");
+      await checkAndRedirect(result.token!);
+      
     } catch (err: any) {
       setError(err.message || "Login failed");
     } finally {
@@ -180,14 +200,25 @@ const Login = () => {
     setError(null);
 
     try {
-      const identifier = formData.otpDeliveryMethod === "Phone" ? formData.phone : formData.email;
-      if (!identifier) throw new Error(`Please enter your ${formData.otpDeliveryMethod.toLowerCase()}`);
+      // ✅ For Phone: User must enter email + phone (to verify they match)
+      // ✅ For Email: User only enters email
+      if (formData.otpDeliveryMethod === "Phone") {
+        if (!formData.email || !formData.phone) {
+          throw new Error("Please enter both email and phone number");
+        }
+        if (!isEmailValid) throw new Error("Please enter a valid email");
+        if (!isPhoneValid) throw new Error("Phone must be +2547XXXXXXXX");
+      } else {
+        if (!formData.email) throw new Error("Please enter your email");
+        if (!isEmailValid) throw new Error("Please enter a valid email");
+      }
 
       const response = await fetch(`${API_BASE}/auth/otp-login-request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          Email: formData.email.trim().toLowerCase(), // Backend still expects Email for this endpoint
+          Email: formData.email.trim().toLowerCase(),
+          Phone: formData.otpDeliveryMethod === "Phone" ? formData.phone.trim() : null,
           OtpDeliveryMethod: formData.otpDeliveryMethod,
         }),
       });
@@ -204,10 +235,12 @@ const Login = () => {
         throw new Error(result.message || "Failed to send OTP");
       }
 
+      const identifier = formData.otpDeliveryMethod === "Phone" ? formData.phone : formData.email;
       setOtpIdentifier(identifier);
       setOtpPurpose("Login");
       setSuccessMessage(`Code sent to your ${formData.otpDeliveryMethod.toLowerCase()}`);
       setAuthMode("verify-otp");
+      
     } catch (err: any) {
       setError(err.message || "Failed to send OTP");
     } finally {
@@ -244,6 +277,7 @@ const Login = () => {
       setOtpPurpose("PasswordReset");
       setSuccessMessage("Reset code sent to your email");
       setAuthMode("verify-otp");
+      
     } catch (err: any) {
       setError(err.message || "Failed to send reset code");
     } finally {
@@ -306,14 +340,21 @@ const Login = () => {
           setAuthMode("login");
           resetForm();
         }, 2000);
-      } else {
+      } 
+      else if (otpPurpose === "Signup") {
+        setSignupEmail(otpIdentifier);
+        setSuccessMessage("Account activated! Please sign in to continue.");
+        setAuthMode("login");
+        setFormData(prev => ({ ...prev, email: otpIdentifier }));
+      } 
+      else if (otpPurpose === "Login") {
         if (result.token) localStorage.setItem("auth_token", result.token);
         if (result.refreshToken) localStorage.setItem("refresh_token", result.refreshToken);
         if (result.user) localStorage.setItem("user", JSON.stringify(result.user));
-
         setSuccessMessage("Verification successful! Redirecting...");
-        setTimeout(() => navigate("/"), 1500);
+        await checkAndRedirect(result.token!);
       }
+      
     } catch (err: any) {
       setError(err.message || "OTP verification failed");
     } finally {
@@ -343,12 +384,8 @@ const Login = () => {
     } else if (authMode === "forgot-password") {
       await handleForgotPasswordRequest();
     } else if (authMode === "verify-otp") {
-      if (formData.otpCode.length !== 6 || !/^\d{6}$/.test(formData.otpCode)) {
-        return setError("Please enter a valid 6-digit code");
-      }
-      if (otpPurpose === "PasswordReset" && !isNewPasswordValid) {
-        return setError("New password does not meet requirements");
-      }
+      if (formData.otpCode.length !== 6 || !/^\d{6}$/.test(formData.otpCode)) return setError("Please enter a valid 6-digit code");
+      if (otpPurpose === "PasswordReset" && !isNewPasswordValid) return setError("New password does not meet requirements");
       await handleVerifyOtp();
     }
   };
@@ -370,8 +407,6 @@ const Login = () => {
         </div>
 
         <div className="bg-card border border-border rounded-3xl p-8 shadow-sm">
-
-          {/* Error & Success Messages */}
           {error && (
             <div className="mb-6 p-4 bg-destructive/10 border border-destructive/30 rounded-2xl flex items-start gap-3 text-destructive text-sm">
               <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
@@ -386,7 +421,6 @@ const Login = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-
             {/* ====================== SIGN UP ====================== */}
             {authMode === "signup" && (
               <>
@@ -431,6 +465,11 @@ const Login = () => {
                   ) : (
                     <Input id="email" type="email" placeholder="you@example.com" value={formData.email} onChange={handleChange} required />
                   )}
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    {formData.otpDeliveryMethod === "Phone" 
+                      ? "📱 OTP code will be sent to this phone number" 
+                      : "📧 OTP code will be sent to this email address"}
+                  </p>
                 </div>
 
                 <div>
@@ -552,11 +591,23 @@ const Login = () => {
                   </div>
                 </div>
 
+                {/* ✅ Email Field (Always Required for Account Lookup) */}
                 <div>
-                  <Label htmlFor={formData.otpDeliveryMethod === "Phone" ? "phone" : "email"}>
-                    {formData.otpDeliveryMethod === "Phone" ? "Phone Number" : "Email Address"}
-                  </Label>
-                  {formData.otpDeliveryMethod === "Phone" ? (
+                  <Label htmlFor="email">Email Address</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={formData.email}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                {/* ✅ Phone Field (Only if Phone selected) */}
+                {formData.otpDeliveryMethod === "Phone" && (
+                  <div>
+                    <Label htmlFor="phone">Phone Number</Label>
                     <Input
                       id="phone"
                       type="tel"
@@ -565,17 +616,17 @@ const Login = () => {
                       onChange={handleChange}
                       required
                     />
-                  ) : (
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={formData.email}
-                      onChange={handleChange}
-                      required
-                    />
-                  )}
-                </div>
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      ⚠️ This phone number must be linked to your email
+                    </p>
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  {formData.otpDeliveryMethod === "Phone" 
+                    ? "📱 OTP code will be sent to this phone number" 
+                    : "📧 OTP code will be sent to this email address"}
+                </p>
 
                 <Button type="submit" className="w-full h-12 text-base font-semibold" disabled={isLoading}>
                   {isLoading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Sending code...</> : "Send Code"}
@@ -624,9 +675,7 @@ const Login = () => {
                     autoFocus
                   />
                   <p className="text-xs text-muted-foreground text-center mt-3">
-                    {otpPurpose === "Login" && formData.otpDeliveryMethod === "Phone" && formData.phone
-                      ? `Sent to ${formData.phone} • Expires in 5 min`
-                      : `Sent to ${otpIdentifier} • Expires in 5 min`}
+                    Expires in 5 minutes
                   </p>
                 </div>
 
@@ -665,16 +714,9 @@ const Login = () => {
                   </div>
                 )}
 
-                {/* Dev Hints */}
-                {otpIdentifier.includes("@") && (
-                  <div className="text-center text-xs text-blue-600 bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4">
-                    Check <a href="https://mailtrap.io/inboxes" target="_blank" rel="noopener" className="underline">Mailtrap Inbox</a>
-                  </div>
-                )}
-
+                {/* Dev OTP Mock (Keep for testing) */}
                 {!otpIdentifier.includes("@") && otpPurpose !== "PasswordReset" && (
                   <div className="text-center text-xs text-amber-600 bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4">
-                    <p>Development Mode: OTP is logged in backend console</p>
                     <Button type="button" variant="outline" size="sm" className="mt-3" onClick={handleDevShowOtp}>
                       Show Mock OTP
                     </Button>
