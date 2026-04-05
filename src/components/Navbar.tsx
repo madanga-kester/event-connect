@@ -1,4 +1,4 @@
-import { Search, MapPin, Bell, Sun, Moon, User, Menu, X, LogOut, Settings, ChevronDown, PlusCircle, Sparkles } from "lucide-react";
+import { Search, MapPin, Bell, Sun, Moon, User, Menu, X, LogOut, Settings, ChevronDown, PlusCircle, Sparkles, Calendar, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/use-theme";
 import { Link, useNavigate } from "react-router-dom";
@@ -118,6 +118,32 @@ const Navbar = () => {
                         Manage Interests
                       </Link>
                       
+
+
+
+<Link 
+  to="/my-events" 
+  className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg"
+  onClick={() => { setUserDropdownOpen(false); setMobileOpen(false); }}
+>
+  <Calendar className="h-4 w-4" />
+  My Events
+</Link>
+
+
+
+<Link 
+  to="/groups" 
+  className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg"
+  onClick={() => { setUserDropdownOpen(false); setMobileOpen(false); }}
+>
+  <Users className="h-4 w-4" />
+  Groups
+</Link>
+
+
+
+
                       <Link 
                         to="/profile" 
                         className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg"

@@ -16,6 +16,14 @@ import Login from "./pages/Login.tsx";
 import Profile from "./pages/Profile.tsx";
 import CreateEvent from "./pages/CreateEvent.tsx";
 import ManageInterests from "./pages/ManageInterests.tsx";  // ✅ Renamed import
+import MyEvents from "./pages/MyEvents.tsx";
+
+// Add imports at top:
+import CreateGroup from "./pages/CreateGroup.tsx";  // ✅ NEW
+
+
+
+
 
 // Admin Pages
 import AdminLogin from "./pages/AdminLogin.tsx";
@@ -39,8 +47,14 @@ const AppContent = () => {
           {/* ==================== PUBLIC ROUTES ==================== */}
           <Route path="/" element={<Index />} />
           <Route path="/groups" element={<Groups />} />
+
+
+       <Route path="/create-group" element={<CreateGroup />} />  {/* ✅ NEW */}
+       {/* <Route path="/groups/:id" element={<GroupDetail />} />   */}
+
+
           <Route path="/map" element={<MapView />} />
-          
+          <Route path="/my-events" element={<MyEvents />} />
           {/* ✅ Your original interests page */}
           <Route path="/interests" element={<Interests />} />
           
