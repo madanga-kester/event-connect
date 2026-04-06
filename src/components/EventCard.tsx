@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MapPin, Calendar, Users, Heart, ArrowRight } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Event } from "@/lib/types";
 
 interface EventCardProps {
@@ -11,6 +11,8 @@ interface EventCardProps {
 }
 
 const EventCard = ({ event, variant = "default" }: EventCardProps) => {
+  const navigate = useNavigate();
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-KE", {
       weekday: "short",
@@ -55,37 +57,51 @@ const EventCard = ({ event, variant = "default" }: EventCardProps) => {
 
   return (
     <Card className="group overflow-hidden border-border bg-card hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+      
+      
+      
       {/* Event Image */}
-      <div className="relative h-40 overflow-hidden">
-        <img
-          src={event.coverImage || "https://via.placeholder.com/400x200?text=Event"}
-          alt={event.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = "https://via.placeholder.com/400x200?text=Event";
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
-        
-        {/* Price Badge */}
-        <Badge 
-          variant={event.isFree ? "secondary" : "default"}
-          className="absolute top-3 right-3"
-        >
-          {formatPrice(event.price)}
-        </Badge>
-        
-        {/* Interest Tags */}
-        {event.eventInterests?.slice(0, 2).map((ei) => (
-          <Badge 
-            key={ei.interestId}
-            variant="outline"
-            className="absolute top-3 left-3 text-xs bg-background/90 backdrop-blur-sm"
-          >
-            {ei.interest.name}
-          </Badge>
-        ))}
-      </div>
+<div className="relative h-40 overflow-hidden">
+  <img
+    src={event.coverImage || `https://placehold.co/400x200/6b7280/ffffff?text=${encodeURIComponent(event.title.substring(0, 20))}`}
+    alt={event.title}
+    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+    onError={(e) => {
+      // ✅ Fallback: show event title on placeholder if image fails
+      const titleText = encodeURIComponent(event.title.substring(0, 20));
+      (e.target as HTMLImageElement).src = `https://placehold.co/400x200/6b7280/ffffff?text=${titleText}`;
+    }}
+  />
+  <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
+  
+  {/* Price Badge */}
+  <Badge 
+    variant={event.isFree ? "secondary" : "default"}
+    className="absolute top-3 right-3"
+  >
+    {formatPrice(event.price)}
+  </Badge>
+  
+  {/* Interest Tags */}
+  {event.eventInterests?.slice(0, 2).map((ei) => (
+    <Badge 
+      key={ei.interestId}
+      variant="outline"
+      className="absolute top-3 left-3 text-xs bg-background/90 backdrop-blur-sm"
+    >
+      {ei.interest.name}
+    </Badge>
+  ))}
+</div>
+
+
+
+
+
+
+
+
+
 
       <CardHeader className="pb-2">
         <h3 className="font-semibold text-foreground line-clamp-1 group-hover:text-primary transition-colors">
@@ -130,16 +146,15 @@ const EventCard = ({ event, variant = "default" }: EventCardProps) => {
               </Badge>
             ))}
           </div>
+
           <Button 
             size="sm" 
             variant="ghost" 
             className="h-8 px-2 text-muted-foreground hover:text-primary"
-            asChild
+            onClick={() => navigate(`/events/${event.id}`)}
           >
-            <Link to={`/events/${event.id}`}>
-              Details
-              <ArrowRight className="h-3.5 w-3.5 ml-1" />
-            </Link>
+            Details
+            <ArrowRight className="h-3.5 w-3.5 ml-1" />
           </Button>
         </div>
       </CardFooter>

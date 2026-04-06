@@ -55,6 +55,9 @@ const Navbar = () => {
 
         <div className="hidden md:flex items-center gap-6 text-sm font-medium">
           <Link to="/" className="text-foreground hover:text-primary transition-colors">Explore</Link>
+            <Link to="/events" className="text-muted-foreground hover:text-primary transition-colors">
+    Events
+  </Link>
           <Link to="/groups" className="text-muted-foreground hover:text-primary transition-colors">Groups</Link>
           <Link to="/map" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
             <MapPin className="h-3.5 w-3.5" /> Map

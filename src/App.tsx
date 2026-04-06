@@ -17,9 +17,10 @@ import Profile from "./pages/Profile.tsx";
 import CreateEvent from "./pages/CreateEvent.tsx";
 import ManageInterests from "./pages/ManageInterests.tsx";  // ✅ Renamed import
 import MyEvents from "./pages/MyEvents.tsx";
-
+import Events from "./pages/Events.tsx";
 // Add imports at top:
 import CreateGroup from "./pages/CreateGroup.tsx";  // ✅ NEW
+import EventDetail from "./pages/EventDetail.tsx";
 
 
 
@@ -57,10 +58,11 @@ const AppContent = () => {
           <Route path="/my-events" element={<MyEvents />} />
           {/* ✅ Your original interests page */}
           <Route path="/interests" element={<Interests />} />
+            <Route path="/events/:id" element={<EventDetail />} />  {/* ✅ NEW: Event Detail Page */}
           
           {/* ✅ NEW: Manage Interests (InterestSelector) at different route */}
           <Route path="/manage-interests" element={<ManageInterests />} />
-          
+          <Route path="/events" element={<Events />} />
           <Route path="/login" element={<Login />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/create-event" element={<CreateEvent />} />
