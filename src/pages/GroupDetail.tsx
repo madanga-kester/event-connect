@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -8,12 +9,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton"; // Added for better loading states
 import {
   Users, MapPin, Calendar, Share2, ArrowLeft, Loader2,
   AlertCircle, CheckCircle, UserPlus, LogOut, Trash2, Settings, X, Save, Plus, ListChecks,
   Image as ImageIcon, Crown, Shield, UserMinus, MessageSquare,
   Sparkles, Link2, ArrowUp, Clock, Camera, UserCheck, TrendingUp, Globe, ChevronDown, ChevronUp, FileText, Trash, Eye, EyeOff
 } from "lucide-react";
+import { motion } from "framer-motion"; // Added for animations
+import { toast } from "sonner"; // Added for modern notifications
 import GroupChat from "@/components/GroupChat";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5260/api";
@@ -142,9 +147,41 @@ const GroupDetail = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [showRequestsModal, setShowRequestsModal] = useState(false);
+
+
   const [showCoverModal, setShowCoverModal] = useState(false);
   const [showCopiedToast, setShowCopiedToast] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
+
+  // Mobile Tab State
+  const [mobileActiveTab, setMobileActiveTab] = useState<"about" | "rules" | "activity" | "discussions" | "gallery" | "chat">("about");
+
+  // Edit Group Modal State - REQUIRED for Edit functionality
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    description: "",
+    city: "",
+    country: "",
+    location: "",
+    isPrivate: false,
+    allowMemberInvites: true,
+    allowMemberPosts: true,
+    moderateMessages: false,
+    maxMembers: "",
+    coverImage: "",
+  });
+  const [editRules, setEditRules] = useState<Array<{ id?: number; title: string; description: string }>>([]);
+  const [editNewRule, setEditNewRule] = useState({ title: "", description: "" });
+  const [editImagePreview, setEditImagePreview] = useState<string | null>(null);
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  // const [showCoverModal, setShowCoverModal] = useState(false);
+  // const [showCopiedToast, setShowCopiedToast] = useState(false);
+  // const [showBackToTop, setShowBackToTop] = useState(false);
+
+  // // Mobile Tab State
+  // const [mobileActiveTab, setMobileActiveTab] = useState<"about" | "rules" | "activity" | "discussions" | "gallery" | "chat">("about");
 
   const [settings, setSettings] = useState<GroupSettings>({
     isPrivate: false,
@@ -195,7 +232,8 @@ const GroupDetail = () => {
       
       if (data.coverImage) {
         setCoverImage(data.coverImage);
-        if (!data.coverImage.startsWith("")) {
+        // Fixed bug: only set coverImageUrl if it's actually a URL
+        if (data.coverImage.startsWith("http")) {
           setCoverImageUrl(data.coverImage);
         }
       }
@@ -210,12 +248,12 @@ const GroupDetail = () => {
         setIsMember(data.groupMembers?.some((m: any) => m.userId === currentUserId && m.isActive) || false);
 
         if (isOrg) {
-          // Small delay to ensure settings are set before fetching dependent data
-          setTimeout(() => {
-            fetchSettings(parseInt(groupId));
-            fetchMembers(parseInt(groupId));
-            fetchPendingRequests(parseInt(groupId));
-          }, 100);
+          // Replaced setTimeout with proper await sequence
+          await Promise.all([
+            fetchSettings(parseInt(groupId)),
+            fetchMembers(parseInt(groupId)),
+            fetchPendingRequests(parseInt(groupId))
+          ]);
         }
       }
     } catch (err: any) {
@@ -261,7 +299,7 @@ const GroupDetail = () => {
       } else if (res.status === 401) {
         setMembersError("Please login to view members");
       } else if (res.status === 404) {
-        setMembers([]); // No members yet is OK
+        setMembers([]);
       } else {
         setMembersError("Failed to load members");
       }
@@ -331,6 +369,10 @@ const GroupDetail = () => {
   }, []);
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
+  const scrollToSection = (sectionId: string) => {
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setMobileActiveTab("about"); // Reset mobile tab if they click sidebar nav
+  };
 
   const handleJoinGroup = async () => {
     if (!authToken) {
@@ -341,11 +383,9 @@ const GroupDetail = () => {
     try {
       setActionLoading(true);
       
-      // CRITICAL: Check privacy from BOTH group and settings state
       const isPrivate = group?.isPrivate === true || settings.isPrivate === true;
       
       if (isPrivate) {
-        // Send join request for private group
         const response = await fetch(`${API_BASE}/groups/${id}/join-request`, {
           method: "POST",
           headers: {
@@ -357,12 +397,11 @@ const GroupDetail = () => {
         
         const result = await response.json();
         if (result.isSuccess) {
-          alert("Join request sent! Wait for organizer approval.");
+          toast.success("Join request sent!", { description: "Wait for organizer approval." });
         } else {
-          alert(result.message || "Failed to send request");
+          toast.error(result.message || "Failed to send request");
         }
       } else {
-        // Auto-join public group
         const response = await fetch(`${API_BASE}/groups/${id}/join`, {
           method: "POST",
           headers: { Authorization: `Bearer ${authToken}` }
@@ -373,10 +412,10 @@ const GroupDetail = () => {
         }
         setIsMember(true);
         setGroup(prev => prev ? { ...prev, memberCount: (prev.memberCount || 0) + 1 } : null);
-        alert("Successfully joined the group!");
+        toast.success("Joined group successfully!", { icon: <UserCheck /> });
       }
     } catch (err: any) {
-      alert(err.message || "Failed to process request.");
+      toast.error(err.message || "Failed to process request.");
     } finally {
       setActionLoading(false);
     }
@@ -394,8 +433,9 @@ const GroupDetail = () => {
       if (!response.ok) throw new Error("Failed to leave");
       setIsMember(false);
       setGroup(prev => prev ? { ...prev, memberCount: Math.max(0, (prev.memberCount || 0) - 1) } : null);
+      toast.info("You left the group.", { description: "We hope to see you back!" });
     } catch (err) {
-      alert("Failed to leave group.");
+      toast.error("Failed to leave group.");
     } finally {
       setActionLoading(false);
     }
@@ -411,10 +451,10 @@ const GroupDetail = () => {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       if (!response.ok) throw new Error("Failed to delete");
-      alert("Group deleted successfully");
+      toast.success("Group deleted.");
       navigate("/groups");
     } catch (err) {
-      alert("Failed to delete group.");
+      toast.error("Failed to delete group.");
     } finally {
       setActionLoading(false);
     }
@@ -435,8 +475,7 @@ const GroupDetail = () => {
         break;
       case "copy":
         navigator.clipboard.writeText(url);
-        setShowCopiedToast(true);
-        setTimeout(() => setShowCopiedToast(false), 2000);
+        toast.success("Link copied to clipboard!");
         break;
     }
     setShowShareMenu(false);
@@ -457,14 +496,14 @@ const GroupDetail = () => {
       });
       const result = await response.json();
       if (result.isSuccess) {
-        alert("Settings saved successfully!");
+        toast.success("Settings saved successfully!");
         setShowSettingsModal(false);
         fetchGroup(id!);
       } else {
-        alert(result.message || "Failed to save settings");
+        toast.error(result.message || "Failed to save settings");
       }
     } catch (err) {
-      alert("Network error. Please try again.");
+      toast.error("Network error. Please try again.");
     } finally {
       setSavingSettings(false);
     }
@@ -482,12 +521,13 @@ const GroupDetail = () => {
       const result = await response.json();
       if (result.isSuccess) {
         setNewRule({ title: "", description: "" });
+        toast.success("Rule added.");
         fetchRules(parseInt(id));
       } else {
-        alert(result.message || "Failed to add rule");
+        toast.error(result.message || "Failed to add rule");
       }
     } catch (err) {
-      alert("Network error.");
+      toast.error("Network error.");
     }
   };
 
@@ -503,13 +543,13 @@ const GroupDetail = () => {
       });
       const result = await response.json();
       if (result.isSuccess) {
-        alert(`Role updated to ${newRole}`);
+        toast.success(`Role updated to ${newRole}`);
         fetchMembers(parseInt(id));
       } else {
-        alert(result.message || "Failed to update role");
+        toast.error(result.message || "Failed to update role");
       }
     } catch (err) {
-      alert("Network error.");
+      toast.error("Network error.");
     } finally {
       setMemberActionLoading(false);
     }
@@ -526,14 +566,14 @@ const GroupDetail = () => {
       });
       const result = await response.json();
       if (result.isSuccess) {
-        alert("Member removed");
+        toast.info("Member removed");
         fetchMembers(parseInt(id));
         setGroup(prev => prev ? { ...prev, memberCount: Math.max(0, (prev.memberCount || 0) - 1) } : null);
       } else {
-        alert(result.message || "Failed to remove member");
+        toast.error(result.message || "Failed to remove member");
       }
     } catch (err) {
-      alert("Network error.");
+      toast.error("Network error.");
     } finally {
       setMemberActionLoading(false);
     }
@@ -551,17 +591,17 @@ const GroupDetail = () => {
       });
       const result = await response.json();
       if (result.isSuccess) {
-        alert(approve ? "Member approved" : "Request rejected");
+        toast.success(approve ? "Member approved" : "Request rejected");
         fetchPendingRequests(parseInt(id));
         if (approve) {
           setGroup(prev => prev ? { ...prev, memberCount: (prev.memberCount || 0) + 1 } : null);
           fetchMembers(parseInt(id));
         }
       } else {
-        alert(result.message || "Failed to process request");
+        toast.error(result.message || "Failed to process request");
       }
     } catch (err) {
-      alert("Network error.");
+      toast.error("Network error.");
     } finally {
       setActionLoading(false);
     }
@@ -571,7 +611,7 @@ const GroupDetail = () => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        alert("Image must be less than 5MB");
+        toast.error("Image too large", { description: "Must be less than 5MB" });
         return;
       }
       const reader = new FileReader();
@@ -602,14 +642,14 @@ const GroupDetail = () => {
       });
       const result = await response.json();
       if (result.isSuccess) {
-        alert("Cover image updated successfully");
+        toast.success("Cover updated successfully");
         setShowCoverModal(false);
         fetchGroup(id);
       } else {
-        alert(result.message || "Failed to update cover image");
+        toast.error(result.message || "Failed to update cover image");
       }
     } catch (err) {
-      alert("Network error.");
+      toast.error("Network error.");
     } finally {
       setActionLoading(false);
     }
@@ -632,12 +672,41 @@ const GroupDetail = () => {
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
   };
 
+  // Skeleton Loader for 2025 UX
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center pt-16">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
-          <p className="text-muted-foreground">Loading group details...</p>
+      <div className="min-h-screen bg-background pt-16">
+        <Skeleton className="h-64 md:h-96 w-full" />
+        <div className="container mx-auto px-4 py-10 max-w-7xl -mt-12 relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-6">
+              {[1, 2, 3, 4].map((i) => (
+                <Card key={i} className="overflow-hidden">
+                  <CardHeader><Skeleton className="h-6 w-40" /></CardHeader>
+                  <CardContent className="space-y-3">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <div className="space-y-6">
+              {[1, 2, 3].map((i) => (
+                <Card key={i}>
+                  <CardHeader><Skeleton className="h-5 w-24" /></CardHeader>
+                  <CardContent className="space-y-3">
+                    {[1, 2, 3].map((j) => (
+                      <div key={j} className="flex items-center gap-3">
+                        <Skeleton className="h-10 w-10 rounded-full" />
+                        <Skeleton className="h-4 w-20" />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -663,295 +732,489 @@ const GroupDetail = () => {
 
   return (
     <div ref={pageRef} className="min-h-screen bg-background">
-      {/* Cover Image */}
-      <div
-        className="relative h-64 md:h-80 w-full overflow-hidden cursor-pointer group"
-        onClick={() => isOrganizer && setShowCoverModal(true)}
-      >
-        {coverImage ? (
-          <img
-            src={coverImage}
-            alt={group.name}
-            className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-700"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = `https://placehold.co/1200x300/6b7280/ffffff?text=${encodeURIComponent(group.name.substring(0, 20))}`;
-            }}
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-primary/10 via-purple-500/10 to-pink-500/10 flex items-center justify-center">
-            <Users className="h-20 w-20 text-muted-foreground/50" />
-          </div>
-        )}
-
-        <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-all pointer-events-none" />
-
-        {isOrganizer && (
-          <Button
-            variant="secondary"
-            size="sm"
-            className="absolute bottom-6 right-6 shadow-lg"
-            onClick={(e) => { e.stopPropagation(); setShowCoverModal(true); }}
-          >
-            <ImageIcon className="h-4 w-4 mr-2" /> Change Cover
-          </Button>
-        )}
-
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate(-1)}
-          className="absolute top-6 left-6 bg-black/40 text-white hover:bg-black/60"
+      {/* Cover Image - Enhanced Layout */}
+      <div className="relative">
+        <div
+          className="relative h-64 md:h-96 w-full overflow-hidden group cursor-pointer"
+          onClick={() => isOrganizer && setShowCoverModal(true)}
         >
-          ← Back
-        </Button>
+          {coverImage ? (
+            <>
+              <img
+                src={coverImage}
+                alt={group.name}
+                className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-700"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = `https://placehold.co/1200x400/6b7280/ffffff?text=${encodeURIComponent(group.name.substring(0, 20))}`;
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+            </>
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-primary/10 via-purple-500/10 to-pink-500/10 flex items-center justify-center">
+              <Users className="h-20 w-20 text-muted-foreground/50" />
+            </div>
+          )}
 
-        <div className="absolute top-6 right-6">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowShareMenu(!showShareMenu)}
-            className="bg-black/40 text-white hover:bg-black/60"
-          >
-            <Share2 className="h-5 w-5" />
-          </Button>
+          {/* Top Overlay Actions */}
+          <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-20">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={(e) => { e.stopPropagation(); navigate(-1); }}
+              className="bg-black/40 text-white hover:bg-black/60 backdrop-blur-sm border-none"
+            >
+              <ArrowLeft className="h-4 w-4 mr-1.5" /> Back
+            </Button>
+            
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => { e.stopPropagation(); setShowShareMenu(!showShareMenu); }}
+                className="bg-black/40 text-white hover:bg-black/60 backdrop-blur-sm border-none"
+                aria-label="Share group"
+              >
+                <Share2 className="h-5 w-5" />
+              </Button>
+              {isOrganizer && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={(e) => { e.stopPropagation(); setShowCoverModal(true); }}
+                  className="bg-black/40 text-white hover:bg-black/60 backdrop-blur-sm border-none"
+                >
+                  <Camera className="h-4 w-4 mr-1.5" /> Edit Cover
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-10 max-w-6xl -mt-12 relative z-10">
+      {/* Main Container - Sticky Sidebar Layout */}
+      <div className="container mx-auto px-4 py-10 max-w-7xl -mt-12 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-8">
+          {/* Main Content Column */}
+          <div className="lg:col-span-2 space-y-6 xl:space-y-8 pb-20 lg:pb-0">
 
-            {/* Header */}
-            <Card>
-              <CardContent className="pt-8">
-                <div className="flex flex-wrap gap-3 mb-4">
-                  <Badge variant="secondary">{group.city}, {group.country}</Badge>
-                  <Badge variant="outline">{group.memberCount} members</Badge>
-                  {isGroupPrivate ? (
-                    <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 border-yellow-300">
-                      <Shield className="h-3 w-3 mr-1" /> Private Group
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-300">
-                      <Globe className="h-3 w-3 mr-1" /> Public Group
-                    </Badge>
-                  )}
-                </div>
-                <h1 className="text-4xl font-bold mb-4">{group.name}</h1>
-                <div className="flex flex-wrap gap-6 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2"><MapPin className="h-4 w-4" /> {group.city}</div>
-                  <div className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Created {formatDate(group.createdAt)}</div>
-                </div>
+            {/* Mobile Tab Navigation */}
+            <div className="lg:hidden sticky top-16 z-30 bg-background/95 backdrop-blur border-b -mx-4 px-4">
+              <div className="flex overflow-x-auto py-2 gap-1 scrollbar-hide">
+                {[
+                  { id: "about", label: "About", icon: Sparkles },
+                  { id: "rules", label: "Rules", icon: ListChecks },
+                  { id: "activity", label: "Activity", icon: Clock, memberOnly: true },
+                  { id: "discussions", label: "Discussions", icon: MessageSquare, memberOnly: true },
+                  { id: "gallery", label: "Gallery", icon: Camera, memberOnly: true },
+                  { id: "chat", label: "Chat", icon: Users, memberOnly: true },
+                ].map((tab) => {
+                  const Icon = tab.icon;
+                  if (tab.memberOnly && !isMember) return null;
+                  return (
+                    <Button
+                      key={tab.id}
+                      variant={mobileActiveTab === tab.id ? "default" : "ghost"}
+                      size="sm"
+                      className="flex-shrink-0 gap-1.5 text-xs"
+                      onClick={() => setMobileActiveTab(tab.id as any)}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {tab.label}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
 
-                {!isMember && !isOrganizer && (
-                  <div className="mt-4 p-3 bg-muted/50 rounded-lg text-sm">
+            {/* Header Card */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+              <Card className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                <CardContent className="pt-8">
+                  <div className="flex flex-wrap gap-3 mb-4">
+                    <Badge variant="secondary">{group.city}, {group.country}</Badge>
+                    <Badge variant="outline">{group.memberCount} members</Badge>
                     {isGroupPrivate ? (
-                      <p className="flex items-center gap-2 text-yellow-700">
-                        <Shield className="h-4 w-4" />
-                        This is a private group. Your join request will need organizer approval.
-                      </p>
+                      <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                        <Shield className="h-3 w-3 mr-1" /> Private
+                      </Badge>
                     ) : (
-                      <p className="flex items-center gap-2 text-green-700">
-                        <Globe className="h-4 w-4" />
-                        This is a public group. You can join instantly.
-                      </p>
+                      <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-300">
+                        <Globe className="h-3 w-3 mr-1" /> Public
+                      </Badge>
                     )}
                   </div>
-                )}
+                  <h1 className="text-3xl md:text-4xl font-bold mb-4">{group.name}</h1>
+                  <div className="flex flex-wrap gap-6 text-sm text-muted-foreground mb-6">
+                    <div className="flex items-center gap-2"><MapPin className="h-4 w-4" /> {group.city}</div>
+                    <div className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Created {formatDate(group.createdAt)}</div>
+                  </div>
 
-                <div className="mt-6 flex flex-col sm:flex-row gap-4">
-                  {isOrganizer ? (
-                    <>
-                      <Button size="lg" variant="outline" onClick={() => setShowSettingsModal(true)} className="flex-1">
-                        <Settings className="mr-2 h-4 w-4" /> Manage Group
-                      </Button>
-                      <Button size="lg" variant="destructive" onClick={handleDeleteGroup} disabled={actionLoading}>
-                        <Trash2 className="mr-2 h-4 w-4" /> Delete
-                      </Button>
-                    </>
-                  ) : isMember ? (
-                    <Button size="lg" variant="outline" onClick={handleLeaveGroup} disabled={actionLoading}>
-                      <LogOut className="mr-2 h-4 w-4" /> Leave Group
-                    </Button>
-                  ) : (
-                    <Button size="lg" onClick={handleJoinGroup} disabled={actionLoading} className="flex-1">
-                      <UserPlus className="mr-2 h-4 w-4" /> {isGroupPrivate ? "Request to Join" : "Join Group"}
-                    </Button>
+                  {!isMember && !isOrganizer && (
+                    <div className="mt-4 p-3 bg-muted/50 rounded-lg text-sm mb-6">
+                      {isGroupPrivate ? (
+                        <p className="flex items-center gap-2 text-yellow-700">
+                          <Shield className="h-4 w-4" />
+                          Private group. Requires organizer approval.
+                        </p>
+                      ) : (
+                        <p className="flex items-center gap-2 text-green-700">
+                          <Globe className="h-4 w-4" />
+                          Public group. Instant join.
+                        </p>
+                      )}
+                    </div>
                   )}
-                </div>
-              </CardContent>
-            </Card>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                <div className="flex flex-col sm:flex-row gap-4">
+                    {isOrganizer ? (
+                      <>
+                        <Button size="lg" variant="outline" onClick={() => { 
+                          // Pre-fill edit form with existing group data
+                          setEditFormData({
+                            name: group.name || "",
+                            description: group.description || "",
+                            city: group.city || "",
+                            country: group.country || "",
+                            location: "", // Not stored in group, leave empty or fetch from events
+                            isPrivate: group.isPrivate || settings.isPrivate || false,
+                            allowMemberInvites: settings.allowMemberInvites ?? true,
+                            allowMemberPosts: settings.allowMemberPosts ?? true,
+                            moderateMessages: settings.moderateMessages ?? false,
+                            maxMembers: "",
+                            coverImage: group.coverImage || "",
+                          });
+                          setEditRules(group.groupMembers ? [] : []); // Will fetch rules separately if needed
+                          if (group.coverImage) setEditImagePreview(group.coverImage);
+                          setShowEditModal(true);
+                        }} className="flex-1">
+                          <Settings className="mr-2 h-4 w-4" /> Edit Group
+                        </Button>
+                        <Button size="lg" variant="outline" onClick={() => setShowSettingsModal(true)} className="flex-1">
+                          <Settings className="mr-2 h-4 w-4" /> Manage Settings
+                        </Button>
+                        <Button size="lg" variant="destructive" onClick={handleDeleteGroup} disabled={actionLoading}>
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete
+                        </Button>
+                      </>
+                    ) : isMember ? (
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                      <Button size="lg" variant="outline" onClick={handleLeaveGroup} disabled={actionLoading}>
+                        <LogOut className="mr-2 h-4 w-4" /> Leave Group
+                      </Button>
+                    ) : (
+                      <Button size="lg" onClick={handleJoinGroup} disabled={actionLoading} className="flex-1">
+                        <UserPlus className="mr-2 h-4 w-4" /> {isGroupPrivate ? "Request to Join" : "Join Group"}
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
 
             {/* About */}
-            <Card>
-              <CardHeader>
-                <CardTitle><Sparkles className="inline mr-2 h-5 w-5" /> About This Group</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="leading-relaxed whitespace-pre-line">{group.description || "No description available."}</p>
-              </CardContent>
-            </Card>
+            {(mobileActiveTab === "about" || window.innerWidth >= 1024) && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
+                <Card id="section-about" className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> About This Group</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <p className="leading-relaxed whitespace-pre-line text-muted-foreground">{group.description || "No description available."}</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
 
             {/* Rules */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><ListChecks className="h-5 w-5" /> Group Guidelines</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {rules.length > 0 ? (
-                  rules.map((rule, index) => (
-                    <div key={rule.id} className="border-l-4 border-primary pl-4 py-1">
-                      <p className="font-medium">{index + 1}. {rule.title}</p>
-                      {rule.description && <p className="text-sm text-muted-foreground mt-1">{rule.description}</p>}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-muted-foreground">No guidelines have been added yet.</p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Recent Activity - Members/Organizer only */}
-            {isMember && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between cursor-pointer" onClick={() => setShowActivityDropdown(!showActivityDropdown)}>
-                    <span className="flex items-center gap-2"><Clock className="h-5 w-5" /> Recent Activity</span>
-                    {showActivityDropdown ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                  </CardTitle>
-                </CardHeader>
-                {showActivityDropdown && (
-                  <CardContent className="space-y-5 pt-0">
-                    {activityFeed.length > 0 ? (
-                      activityFeed.map((item) => (
-                        <div key={item.id} className="flex gap-3">
-                          {item.type === "join" && <UserCheck className="h-5 w-5 text-green-500 mt-1" />}
-                          {item.type === "post" && <MessageSquare className="h-5 w-5 text-primary mt-1" />}
-                          {item.type === "event" && <Calendar className="h-5 w-5 text-blue-500 mt-1" />}
-                          {item.type === "photo" && <Camera className="h-5 w-5 text-purple-500 mt-1" />}
-                          <div>
-                            <p><strong>{item.user.firstName} {item.user.lastName}</strong> {item.description}</p>
-                            <p className="text-xs text-muted-foreground">{formatDate(item.createdAt)}</p>
-                          </div>
+            {(mobileActiveTab === "rules" || window.innerWidth >= 1024) && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
+                <Card id="section-rules" className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2"><ListChecks className="h-5 w-5 text-primary" /> Group Guidelines</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 space-y-6">
+                    {rules.length > 0 ? (
+                      rules.map((rule, index) => (
+                        <div key={rule.id} className="border-l-4 border-primary/20 pl-4 py-1 hover:bg-muted/30 transition-colors rounded-r-lg">
+                          <p className="font-medium">{index + 1}. {rule.title}</p>
+                          {rule.description && <p className="text-sm text-muted-foreground mt-1">{rule.description}</p>}
                         </div>
                       ))
                     ) : (
-                      <p className="text-sm text-muted-foreground text-center py-4">No recent activity</p>
+                      <p className="text-muted-foreground">No guidelines have been added yet.</p>
                     )}
-                  </CardContent>
-                )}
-              </Card>
-            )}
 
-            {/* Popular Discussions - Members/Organizer only */}
-            {isMember && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between cursor-pointer" onClick={() => setShowDiscussionsDropdown(!showDiscussionsDropdown)}>
-                    <span className="flex items-center gap-2"><TrendingUp className="h-5 w-5" /> Popular Discussions</span>
-                    {showDiscussionsDropdown ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                  </CardTitle>
-                </CardHeader>
-                {showDiscussionsDropdown && (
-                  <CardContent className="space-y-3 pt-0">
-                    {discussions.length > 0 ? (
-                      discussions.map((topic) => (
-                        <div
-                          key={topic.id}
-                          className="p-4 border rounded-lg hover:bg-muted cursor-pointer transition-colors"
-                          onClick={() => alert(`Opening discussion: ${topic.title}`)}
-                        >
-                          <p className="font-medium text-sm">{topic.title}</p>
-                          <p className="text-xs text-muted-foreground mt-1">{topic.replies} replies • {topic.trending ? "Trending" : "Active"}</p>
+
+                    {/* Organizer-only: Add New Rule Form
+                    {isOrganizer && (
+                      <div className="pt-4 border-t mt-4">
+                        <h4 className="font-medium mb-3 flex items-center gap-2">
+                          <Plus className="h-4 w-4" /> Add New Guideline
+                        </h4>
+                        <div className="space-y-3">
+                          <Input
+                            placeholder="Rule title (e.g., 'Be respectful')"
+                            value={newRule.title}
+                            onChange={(e) => setNewRule(prev => ({ ...prev, title: e.target.value }))}
+                            maxLength={100}
+                          />
+                          <Input
+                            placeholder="Description (optional)"
+                            value={newRule.description}
+                            onChange={(e) => setNewRule(prev => ({ ...prev, description: e.target.value }))}
+                            maxLength={250}
+                          />
+                          <Button 
+                            size="sm" 
+                            onClick={handleAddRule}
+                            disabled={!newRule.title.trim()}
+                            className="w-full sm:w-auto"
+                          >
+                            <Plus className="h-4 w-4 mr-2" /> Add Rule
+                          </Button>
                         </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-muted-foreground text-center py-4">No discussions yet</p>
-                    )}
-                  </CardContent>
-                )}
-              </Card>
-            )}
-
-            {/* Photo Gallery - Members/Organizer only */}
-            {isMember && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2"><Camera className="h-5 w-5" /> Photo Gallery</span>
-                    <Button variant="ghost" size="sm" onClick={() => setShowGalleryPopup(true)}>View All</Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {(gallery.length > 0 ? gallery.slice(0, 4) : [1,2,3,4].map(i => ({ id: i, url: `https://picsum.photos/id/${40+i}/400/400` }))).map((item: any, index: number) => (
-                      <div key={item.id || index} className="aspect-square rounded-lg overflow-hidden border hover:border-primary cursor-pointer" onClick={() => openGalleryPopup(item.url)}>
-                        <img
-                          src={item.url}
-                          alt={`Gallery ${index + 1}`}
-                          className="w-full h-full object-cover hover:scale-105 transition-transform"
-                        />
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                    )} */}
+
+                  </CardContent>
+                </Card>
+              </motion.div>
             )}
 
-            {/* Group Chat - Members/Organizer only */}
-            {isMember && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    Group Chat
-                    {isOrganizer && <Badge variant="outline" className="text-xs">You can delete any message</Badge>}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {id && <GroupChat groupId={parseInt(id)} currentUserId={currentUserId} isOrganizer={isOrganizer} />}
-                </CardContent>
-              </Card>
+            {/* Recent Activity */}
+            {isMember && (mobileActiveTab === "activity" || window.innerWidth >= 1024) && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.3 }}>
+                <Card id="section-activity" className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center justify-between cursor-pointer" onClick={() => setShowActivityDropdown(!showActivityDropdown)}>
+                      <span className="flex items-center gap-2"><Clock className="h-5 w-5 text-primary" /> Recent Activity</span>
+                      {showActivityDropdown ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                    </CardTitle>
+                  </CardHeader>
+                  {showActivityDropdown && (
+                    <CardContent className="space-y-4 pt-0">
+                      {activityFeed.length > 0 ? (
+                        activityFeed.map((item) => (
+                          <div key={item.id} className="flex gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                            {item.type === "join" && <UserCheck className="h-5 w-5 text-green-500 mt-1 flex-shrink-0" />}
+                            {item.type === "post" && <MessageSquare className="h-5 w-5 text-primary mt-1 flex-shrink-0" />}
+                            {item.type === "event" && <Calendar className="h-5 w-5 text-blue-500 mt-1 flex-shrink-0" />}
+                            {item.type === "photo" && <Camera className="h-5 w-5 text-purple-500 mt-1 flex-shrink-0" />}
+                            <div>
+                              <p><strong>{item.user.firstName} {item.user.lastName}</strong> {item.description}</p>
+                              <p className="text-xs text-muted-foreground mt-1">{formatDate(item.createdAt)}</p>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">No recent activity</p>
+                      )}
+                    </CardContent>
+                  )}
+                </Card>
+              </motion.div>
+            )}
+
+            {/* Popular Discussions */}
+            {isMember && (mobileActiveTab === "discussions" || window.innerWidth >= 1024) && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.4 }}>
+                <Card id="section-discussions" className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center justify-between cursor-pointer" onClick={() => setShowDiscussionsDropdown(!showDiscussionsDropdown)}>
+                      <span className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary" /> Popular Discussions</span>
+                      {showDiscussionsDropdown ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                    </CardTitle>
+                  </CardHeader>
+                  {showDiscussionsDropdown && (
+                    <CardContent className="space-y-3 pt-0">
+                      {discussions.length > 0 ? (
+                        discussions.map((topic) => (
+                          <div
+                            key={topic.id}
+                            className="p-4 border rounded-lg hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => alert(`Opening discussion: ${topic.title}`)}
+                          >
+                            <p className="font-medium text-sm">{topic.title}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{topic.replies} replies • {topic.trending ? "🔥 Trending" : "💬 Active"}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">No discussions yet</p>
+                      )}
+                    </CardContent>
+                  )}
+                </Card>
+              </motion.div>
+            )}
+
+            {/* Photo Gallery */}
+            {isMember && (mobileActiveTab === "gallery" || window.innerWidth >= 1024) && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.5 }}>
+                <Card id="section-gallery" className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center justify-between">
+                      <span className="flex items-center gap-2"><Camera className="h-5 w-5 text-primary" /> Photo Gallery</span>
+                      {gallery.length > 0 && (
+                        <Button variant="ghost" size="sm" onClick={() => setShowGalleryPopup(true)}>View All</Button>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {(gallery.length > 0 ? gallery.slice(0, 6) : [1,2,3].map(i => ({ id: `ph-${i}`, url: `https://picsum.photos/seed/${i}/400/400` }))).map((item: any, index: number) => (
+                        <motion.button
+                          key={item.id || index}
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="relative aspect-square rounded-lg overflow-hidden border border-border hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all group"
+                          onClick={() => openGalleryPopup(item.url)}
+                          aria-label={`View gallery image ${index + 1}`}
+                        >
+                          <img
+                            src={item.url}
+                            alt={`Gallery preview ${index + 1}`}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                            <Eye className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                          </div>
+                        </motion.button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+
+            {/* Group Chat */}
+            {isMember && (mobileActiveTab === "chat" || window.innerWidth >= 1024) && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.6 }}>
+                <Card className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center justify-between">
+                      <span className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /> Group Chat</span>
+                      {isOrganizer && <Badge variant="outline" className="text-xs">Admin Mode</Badge>}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {id && <GroupChat groupId={parseInt(id)} currentUserId={currentUserId} isOrganizer={isOrganizer} />}
+                  </CardContent>
+                </Card>
+              </motion.div>
             )}
 
             {/* Upcoming Events */}
             {group.groupEvents && group.groupEvents.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" /> Upcoming Events</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {group.groupEvents.map((ge) => (
-                    <div
-                      key={ge.id}
-                      className="p-5 border rounded-xl hover:border-primary cursor-pointer transition-all flex justify-between"
-                      onClick={() => navigate(`/events/${ge.event.id}`)}
-                    >
-                      <div>
-                        <h4 className="font-semibold">{ge.event.title}</h4>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {formatDate(ge.event.startTime)} • {ge.event.location || "Location TBD"}
-                        </p>
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.7 }}>
+                <Card className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5 text-primary" /> Upcoming Events</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4 pt-0">
+                    {group.groupEvents.map((ge) => (
+                      <div
+                        key={ge.id}
+                        className="p-5 border rounded-xl hover:border-primary cursor-pointer transition-all flex justify-between items-center bg-card"
+                        onClick={() => navigate(`/events/${ge.event.id}`)}
+                      >
+                        <div>
+                          <h4 className="font-semibold">{ge.event.title}</h4>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {formatDate(ge.event.startTime)} • {ge.event.location || "Location TBD"}
+                          </p>
+                        </div>
+                        <Badge variant={ge.event.isFree ? "secondary" : "default"} className="text-xs">
+                          {ge.event.isFree ? "Free" : `KES ${ge.event.price}`}
+                        </Badge>
                       </div>
-                      <Badge variant={ge.event.isFree ? "secondary" : "default"}>
-                        {ge.event.isFree ? "Free" : `KES ${ge.event.price}`}
-                      </Badge>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+                    ))}
+                  </CardContent>
+                </Card>
+              </motion.div>
             )}
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Organizer Card - FIXED: Single title */}
-            <Card>
-              <CardHeader><CardTitle>Organizer</CardTitle></CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-12 w-12">
+          {/* Sidebar Column - Sticky on Desktop */}
+          <div className="lg:sticky lg:top-24 lg:self-start space-y-6">
+            {/* Desktop Section Navigation */}
+            <Card className="hidden lg:block shadow-sm">
+              <CardHeader className="pb-3"><CardTitle className="text-base">Jump To</CardTitle></CardHeader>
+              <CardContent className="pt-0">
+                <nav className="space-y-1">
+                  {[
+                    { id: "section-about", label: "About", icon: Sparkles },
+                    { id: "section-rules", label: "Guidelines", icon: ListChecks },
+                    isMember && { id: "section-activity", label: "Activity", icon: Clock },
+                    isMember && { id: "section-discussions", label: "Discussions", icon: MessageSquare },
+                    isMember && { id: "section-gallery", label: "Gallery", icon: Camera },
+                  ].filter(Boolean).map((item: any) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => scrollToSection(item.id)}
+                        className="flex items-center w-full gap-2 px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground text-left"
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </nav>
+              </CardContent>
+            </Card>
+
+            {/* Organizer Card */}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3"><CardTitle>Organizer</CardTitle></CardHeader>
+              <CardContent className="pt-0">
+                <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                  <Avatar className="h-12 w-12 border-2 border-background shadow-sm">
                     <AvatarFallback>{getInitials(group.organizer?.firstName || "", group.organizer?.lastName || "")}</AvatarFallback>
                   </Avatar>
                   <div>
@@ -963,17 +1226,18 @@ const GroupDetail = () => {
             </Card>
 
             {/* Members Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Members ({group.memberCount})</CardTitle>
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between">
+                  <span>Members ({group.memberCount})</span>
+                </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-0">
                 {isMember || isOrganizer ? (
                   <>
                     {membersLoading ? (
                       <div className="text-center py-4">
                         <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-2" />
-                        <p className="text-sm text-muted-foreground">Loading members...</p>
                       </div>
                     ) : membersError ? (
                       <div className="text-center py-4 text-destructive text-sm">
@@ -988,7 +1252,7 @@ const GroupDetail = () => {
                     ) : members.length > 0 ? (
                       <div className="space-y-3">
                         {members.slice(0, 5).map((member) => (
-                          <div key={member.id} className="flex items-center gap-3">
+                          <div key={member.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
                             <Avatar className="h-8 w-8">
                               <AvatarImage src={member.user.profilePicture} />
                               <AvatarFallback>{getInitials(member.user.firstName, member.user.lastName)}</AvatarFallback>
@@ -1021,40 +1285,38 @@ const GroupDetail = () => {
               </CardContent>
             </Card>
 
-            {/* Pending Requests - Organizer only */}
+            {/* Pending Requests */}
             {isOrganizer && (
-              <Card className={pendingRequests.length > 0 ? "border-yellow-500/50" : ""}>
-                <CardHeader>
+              <Card className={pendingRequests.length > 0 ? "border-yellow-500/50 shadow-sm" : "shadow-sm"}>
+                <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-yellow-700">
                     <AlertCircle className="h-5 w-5" /> Pending Requests ({pendingRequests.length})
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pt-0">
                   {pendingRequests.length > 0 ? (
                     <Button variant="outline" className="w-full" onClick={() => { setShowRequestsModal(true); fetchPendingRequests(parseInt(id!)); }}>
-                      Review {pendingRequests.length} Request{pendingRequests.length !== 1 ? "s" : ""}
+                      Review Request{pendingRequests.length !== 1 ? "s" : ""}
                     </Button>
                   ) : (
-                    <p className="text-sm text-muted-foreground text-center py-2">
-                      No pending requests
-                    </p>
+                    <p className="text-sm text-muted-foreground text-center py-2">No pending requests</p>
                   )}
                 </CardContent>
               </Card>
             )}
 
             {/* Share Card */}
-            <Card>
-              <CardHeader><CardTitle>Share Group</CardTitle></CardHeader>
-              <CardContent>
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3"><CardTitle>Share Group</CardTitle></CardHeader>
+              <CardContent className="pt-0">
                 <div className="flex gap-3">
                   {["facebook", "twitter", "whatsapp", "copy"].map((p) => (
-                    <Button key={p} variant="outline" size="icon" onClick={() => handleShare(p)} className="h-11 w-11">
+                    <Button key={p} variant="outline" size="icon" onClick={() => handleShare(p)} className="h-10 w-10 hover:scale-105 transition-transform">
                       <Share2 className="h-4 w-4" />
                     </Button>
                   ))}
                 </div>
-                {showCopiedToast && <p className="text-green-600 text-xs mt-3 text-center">Link copied to clipboard!</p>}
+                {showCopiedToast && <p className="text-green-600 text-xs mt-3 text-center">Link copied!</p>}
               </CardContent>
             </Card>
           </div>
@@ -1066,7 +1328,7 @@ const GroupDetail = () => {
         <Button
           onClick={scrollToTop}
           size="icon"
-          className="fixed bottom-8 right-8 z-50 rounded-full shadow-xl"
+          className="fixed bottom-8 right-8 z-50 rounded-full shadow-xl hover:scale-105 transition-transform"
         >
           <ArrowUp className="h-5 w-5" />
         </Button>
@@ -1076,13 +1338,25 @@ const GroupDetail = () => {
       {showSettingsModal && isOrganizer && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <CardHeader className="sticky top-0 bg-card border-b z-10">
+            <CardHeader className="sticky top-0 bg-card border-b z-10 py-4">
               <div className="flex justify-between items-center">
                 <CardTitle>Manage Group</CardTitle>
                 <Button variant="ghost" size="icon" onClick={() => setShowSettingsModal(false)}><X className="h-4 w-4" /></Button>
               </div>
             </CardHeader>
-            <CardContent className="pt-6 space-y-8">
+
+
+
+
+
+
+
+
+
+
+
+                        <CardContent className="pt-6 space-y-8">
+              {/* Membership Settings */}
               <div>
                 <h3 className="font-semibold mb-4 flex items-center gap-2"><Users className="h-5 w-5" /> Membership</h3>
                 <div className="space-y-4">
@@ -1103,40 +1377,105 @@ const GroupDetail = () => {
                 </div>
               </div>
 
+              <Separator />
+
+              {/* Content Settings */}
               <div>
                 <h3 className="font-semibold mb-4 flex items-center gap-2"><Settings className="h-5 w-5" /> Content Settings</h3>
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <Label>Allow Member Posts</Label>
-                      <p className="text-sm text-muted-foreground">Members can send messages</p>
+                  {[
+                    { key: "allowMemberPosts", label: "Allow Member Posts", desc: "Members can send messages" },
+                    { key: "moderateMessages", label: "Moderate Messages", desc: "Messages require approval" },
+                    { key: "allowLinks", label: "Allow Links", desc: "Allow sharing URLs" },
+                    { key: "allowMedia", label: "Allow Media", desc: "Allow images and videos" }
+                  ].map(({ key, label, desc }) => (
+                    <div key={key} className="flex justify-between items-center">
+                      <div>
+                        <Label>{label}</Label>
+                        <p className="text-sm text-muted-foreground">{desc}</p>
+                      </div>
+                      <Switch 
+                        checked={settings[key as keyof GroupSettings] as boolean} 
+                        onCheckedChange={(v) => handleSettingsChange(key as keyof GroupSettings, v)} 
+                      />
                     </div>
-                    <Switch checked={settings.allowMemberPosts} onCheckedChange={(v) => handleSettingsChange("allowMemberPosts", v)} />
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <Label>Moderate Messages</Label>
-                      <p className="text-sm text-muted-foreground">Messages require approval</p>
-                    </div>
-                    <Switch checked={settings.moderateMessages} onCheckedChange={(v) => handleSettingsChange("moderateMessages", v)} />
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <Label>Allow Links</Label>
-                      <p className="text-sm text-muted-foreground">Allow sharing URLs</p>
-                    </div>
-                    <Switch checked={settings.allowLinks} onCheckedChange={(v) => handleSettingsChange("allowLinks", v)} />
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <Label>Allow Media</Label>
-                      <p className="text-sm text-muted-foreground">Allow images and videos</p>
-                    </div>
-                    <Switch checked={settings.allowMedia} onCheckedChange={(v) => handleSettingsChange("allowMedia", v)} />
-                  </div>
+                  ))}
                 </div>
               </div>
 
+              <Separator />
+
+              {/* Group Rules Management - NEW SECTION */}
+              <div>
+                <h3 className="font-semibold mb-4 flex items-center gap-2"><ListChecks className="h-5 w-5" /> Group Guidelines</h3>
+                
+                {/* Existing Rules List */}
+                <div className="space-y-3 mb-4 max-h-48 overflow-y-auto pr-2">
+                  {rules.length > 0 ? (
+                    rules.map((rule) => (
+                      <div key={rule.id} className="flex items-start justify-between p-3 bg-muted/30 rounded-lg border">
+                        <div>
+                          <p className="font-medium text-sm">{rule.title}</p>
+                          {rule.description && <p className="text-xs text-muted-foreground mt-0.5">{rule.description}</p>}
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={async () => {
+                            if (!confirm(`Delete rule "${rule.title}"?`)) return;
+                            try {
+                              if (!authToken || !id) return;
+                              const res = await fetch(`${API_BASE}/groups/${id}/rules/${rule.id}`, {
+                                method: "DELETE",
+                                headers: { Authorization: `Bearer ${authToken}` }
+                              });
+                              if (res.ok) {
+                                toast.success("Rule deleted");
+                                fetchRules(parseInt(id));
+                              }
+                            } catch {
+                              toast.error("Failed to delete rule");
+                            }
+                          }}
+                        >
+                          <Trash className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">No guidelines yet</p>
+                  )}
+                </div>
+                
+                {/* Add New Rule Form */}
+                <div className="space-y-3 p-3 bg-muted/20 rounded-lg border">
+                  <Input
+                    placeholder="Rule title (e.g., 'Be respectful')"
+                    value={newRule.title}
+                    onChange={(e) => setNewRule(prev => ({ ...prev, title: e.target.value }))}
+                    maxLength={100}
+                    className="h-9"
+                  />
+                  <Input
+                    placeholder="Description (optional)"
+                    value={newRule.description}
+                    onChange={(e) => setNewRule(prev => ({ ...prev, description: e.target.value }))}
+                    maxLength={250}
+                    className="h-9"
+                  />
+                  <Button 
+                    size="sm" 
+                    onClick={handleAddRule}
+                    disabled={!newRule.title.trim()}
+                    className="w-full"
+                  >
+                    <Plus className="h-4 w-4 mr-2" /> Add Guideline
+                  </Button>
+                </div>
+              </div>
+
+              {/* Save/Cancel Buttons */}
               <div className="flex justify-end gap-3 pt-4 border-t">
                 <Button variant="outline" onClick={() => setShowSettingsModal(false)}>Cancel</Button>
                 <Button onClick={handleSaveSettings} disabled={savingSettings}>
@@ -1145,6 +1484,15 @@ const GroupDetail = () => {
                 </Button>
               </div>
             </CardContent>
+
+
+
+
+
+
+
+
+
           </Card>
         </div>
       )}
@@ -1153,7 +1501,7 @@ const GroupDetail = () => {
       {showMembersModal && isOrganizer && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <CardHeader className="sticky top-0 bg-card border-b z-10">
+            <CardHeader className="sticky top-0 bg-card border-b z-10 py-4">
               <div className="flex justify-between items-center">
                 <CardTitle>Manage Members ({members.length})</CardTitle>
                 <Button variant="ghost" size="icon" onClick={() => setShowMembersModal(false)}><X className="h-4 w-4" /></Button>
@@ -1175,7 +1523,7 @@ const GroupDetail = () => {
                 </div>
               ) : members.length > 0 ? (
                 members.map((member) => (
-                  <div key={member.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div key={member.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
                     <div className="flex items-center gap-3">
                       <Avatar className="h-10 w-10">
                         <AvatarImage src={member.user.profilePicture} />
@@ -1223,7 +1571,7 @@ const GroupDetail = () => {
       {showRequestsModal && isOrganizer && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <CardHeader className="sticky top-0 bg-card border-b z-10">
+            <CardHeader className="sticky top-0 bg-card border-b z-10 py-4">
               <div className="flex justify-between items-center">
                 <CardTitle>Pending Join Requests</CardTitle>
                 <Button variant="ghost" size="icon" onClick={() => setShowRequestsModal(false)}><X className="h-4 w-4" /></Button>
@@ -1243,7 +1591,7 @@ const GroupDetail = () => {
                         <p className="text-xs text-muted-foreground">Requested: {formatDate(request.requestedAt)}</p>
                       </div>
                     </div>
-                    {request.message && <p className="text-sm italic text-muted-foreground mb-4">"{request.message}"</p>}
+                    {request.message && <p className="text-sm italic text-muted-foreground mb-4 bg-muted p-2 rounded">"{request.message}"</p>}
                     <div className="flex gap-3">
                       <Button variant="outline" onClick={() => handleReviewRequest(request.id, false)} disabled={actionLoading}>Reject</Button>
                       <Button onClick={() => handleReviewRequest(request.id, true)} disabled={actionLoading}>Approve</Button>
@@ -1262,7 +1610,7 @@ const GroupDetail = () => {
       {showCoverModal && isOrganizer && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-lg">
-            <CardHeader>
+            <CardHeader className="py-4">
               <div className="flex justify-between items-center">
                 <CardTitle>Update Cover Image</CardTitle>
                 <Button variant="ghost" size="icon" onClick={() => setShowCoverModal(false)}><X className="h-4 w-4" /></Button>
@@ -1334,6 +1682,51 @@ const GroupDetail = () => {
         </div>
       )}
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       {/* Gallery Popup */}
       {showGalleryPopup && isMember && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowGalleryPopup(false)}>
@@ -1343,6 +1736,238 @@ const GroupDetail = () => {
             </Button>
             <img src={selectedGalleryImage} alt="Full view" className="w-full h-auto max-h-[80vh] object-contain rounded-lg shadow-2xl" />
           </div>
+        </div>
+      )}
+
+      {/* Edit Group Modal - FIXED: Now properly nested inside main return */}
+      {showEditModal && isOrganizer && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <CardHeader className="sticky top-0 bg-card border-b z-10 py-4">
+              <div className="flex justify-between items-center">
+                <CardTitle>Edit Group Details</CardTitle>
+                <Button variant="ghost" size="icon" onClick={() => setShowEditModal(false)}><X className="h-4 w-4" /></Button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-6">
+              
+              {/* Basic Info */}
+              <div className="space-y-4">
+                <h3 className="font-semibold flex items-center gap-2"><Users className="h-5 w-5" /> Basic Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Group Name *</Label>
+                    <Input
+                      value={editFormData.name}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="e.g., Nairobi Tech Enthusiasts"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Cover Image URL</Label>
+                    <Input
+                      type="url"
+                      value={editFormData.coverImage}
+                      onChange={(e) => {
+                        setEditFormData(prev => ({ ...prev, coverImage: e.target.value }));
+                        setEditImagePreview(e.target.value);
+                      }}
+                      placeholder="https://example.com/image.jpg"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Textarea
+                    value={editFormData.description}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="What is this group about?"
+                    rows={4}
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>City</Label>
+                    <Input
+                      value={editFormData.city}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, city: e.target.value }))}
+                      placeholder="Nairobi"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Country</Label>
+                    <Input
+                      value={editFormData.country}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, country: e.target.value }))}
+                      placeholder="Kenya"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Specific Location</Label>
+                    <Input
+                      value={editFormData.location}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, location: e.target.value }))}
+                      placeholder="e.g., iHub, Westlands"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Privacy & Content Settings */}
+              <div className="space-y-4">
+                <h3 className="font-semibold flex items-center gap-2"><Settings className="h-5 w-5" /> Privacy & Content</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <Label className="font-medium">{editFormData.isPrivate ? "Private Group" : "Public Group"}</Label>
+                      <p className="text-xs text-muted-foreground">{editFormData.isPrivate ? "Approval required to join" : "Anyone can join"}</p>
+                    </div>
+                    <Switch
+                      checked={editFormData.isPrivate}
+                      onCheckedChange={(v) => setEditFormData(prev => ({ ...prev, isPrivate: v }))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <Label className="font-medium">Allow Member Invites</Label>
+                      <p className="text-xs text-muted-foreground">Members can invite others</p>
+                    </div>
+                    <Switch
+                      checked={editFormData.allowMemberInvites}
+                      onCheckedChange={(v) => setEditFormData(prev => ({ ...prev, allowMemberInvites: v }))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <Label className="font-medium">Allow Member Posts</Label>
+                      <p className="text-xs text-muted-foreground">Members can send messages</p>
+                    </div>
+                    <Switch
+                      checked={editFormData.allowMemberPosts}
+                      onCheckedChange={(v) => setEditFormData(prev => ({ ...prev, allowMemberPosts: v }))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <Label className="font-medium">Moderate Messages</Label>
+                      <p className="text-xs text-muted-foreground">Messages require approval</p>
+                    </div>
+                    <Switch
+                      checked={editFormData.moderateMessages}
+                      onCheckedChange={(v) => setEditFormData(prev => ({ ...prev, moderateMessages: v }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Group Rules */}
+              <div className="space-y-4">
+                <h3 className="font-semibold flex items-center gap-2"><ListChecks className="h-5 w-5" /> Group Guidelines</h3>
+                {/* Existing Rules */}
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                  {editRules.length > 0 ? (
+                    editRules.map((rule, idx) => (
+                      <div key={rule.id || idx} className="flex items-start justify-between p-3 bg-muted/30 rounded-lg border">
+                        <div>
+                          <p className="font-medium text-sm">{rule.title}</p>
+                          {rule.description && <p className="text-xs text-muted-foreground">{rule.description}</p>}
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setEditRules(prev => prev.filter((_, i) => i !== idx))}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">No custom rules set</p>
+                  )}
+                </div>
+                {/* Add New Rule */}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="New rule title"
+                    value={editNewRule.title}
+                    onChange={(e) => setEditNewRule(prev => ({ ...prev, title: e.target.value }))}
+                    className="flex-1"
+                  />
+                  <Button size="sm" onClick={() => {
+                    if (!editNewRule.title.trim()) return;
+                    setEditRules(prev => [...prev, { title: editNewRule.title.trim(), description: editNewRule.description.trim() }]);
+                    setEditNewRule({ title: "", description: "" });
+                  }}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Cover Image Preview */}
+              {editImagePreview && (
+                <div className="space-y-2">
+                  <Label>Cover Image Preview</Label>
+                  <div className="aspect-video rounded-lg overflow-hidden border bg-muted">
+                    <img src={editImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button variant="outline" onClick={() => setShowEditModal(false)} disabled={editLoading}>Cancel</Button>
+                <Button onClick={async () => {
+                  if (!editFormData.name.trim()) {
+                    toast.error("Group name is required");
+                    return;
+                  }
+                  try {
+                    setEditLoading(true);
+                    if (!authToken || !id) return;
+                    
+                    const payload = {
+                      name: editFormData.name.trim(),
+                      description: editFormData.description.trim() || null,
+                      city: editFormData.city.trim() || null,
+                      country: editFormData.country.trim() || null,
+                      location: editFormData.location.trim() || null,
+                      isPrivate: editFormData.isPrivate,
+                      allowMemberInvites: editFormData.allowMemberInvites,
+                      allowMemberPosts: editFormData.allowMemberPosts,
+                      moderateMessages: editFormData.moderateMessages,
+                      coverImage: editFormData.coverImage || null,
+                    };
+                    
+                    const response = await fetch(`${API_BASE}/groups/${id}`, {
+                      method: "PUT",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${authToken}`
+                      },
+                      body: JSON.stringify(payload)
+                    });
+                    
+                    const result = await response.json();
+                    if (result.isSuccess) {
+                      toast.success("Group updated successfully!");
+                      setShowEditModal(false);
+                      fetchGroup(id!);
+                    } else {
+                      toast.error(result.message || "Failed to update group");
+                    }
+                  } catch (err) {
+                    toast.error("Network error. Please try again.");
+                  } finally {
+                    setEditLoading(false);
+                  }
+                }} disabled={editLoading}>
+                  {editLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                  Save Changes
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>

@@ -50,9 +50,27 @@ const GroupChat = ({ groupId, currentUserId }: GroupChatProps) => {
     return () => clearInterval(interval);
   }, [groupId]);
 
+  // useEffect(() => {
+  //   messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // }, [messages]);
+
+  const isInitialLoad = useRef(true);
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Skip auto-scroll on initial load to prevent page jump
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
+    }
+    // Only auto-scroll to bottom for NEW messages after initial load
+   // messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+
+
+
+
+
 
   const fetchMessages = async () => {
     try {
