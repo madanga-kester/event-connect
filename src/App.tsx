@@ -7,65 +7,72 @@ import { ThemeProvider } from "@/hooks/use-theme";
 import { AuthProvider } from "@/context/AuthContext";
 import Navbar from "@/components/Navbar";
 
-// Public Pages
+// ==================== PUBLIC PAGES ====================
 import Index from "./pages/Index.tsx";
 import Groups from "./pages/Groups.tsx";
+import CreateGroup from "./pages/CreateGroup.tsx";
+import GroupDetail from "./pages/GroupDetail.tsx";
+import GroupSettings from "./pages/GroupSettings.tsx";
 import MapView from "./pages/MapView.tsx";
-import Interests from "./pages/Interests.tsx";  // ✅ Your original interests page
+import Interests from "./pages/Interests.tsx";
+import ManageInterests from "./pages/ManageInterests.tsx";
 import Login from "./pages/Login.tsx";
 import Profile from "./pages/Profile.tsx";
 import CreateEvent from "./pages/CreateEvent.tsx";
-import ManageInterests from "./pages/ManageInterests.tsx";  // ✅ Renamed import
 import MyEvents from "./pages/MyEvents.tsx";
 import Events from "./pages/Events.tsx";
-// Add imports at top:
-import CreateGroup from "./pages/CreateGroup.tsx";  // ✅ NEW
 import EventDetail from "./pages/EventDetail.tsx";
 
-
-
-
-
-// Admin Pages
+// ==================== ADMIN PAGES ====================
 import AdminLogin from "./pages/AdminLogin.tsx";
 import AdminDashboard from "./pages/AdminDashboard.tsx";
 
-// Utility Pages
+// ==================== UTILITY PAGES ====================
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
+// ==================== APP CONTENT WITH CONDITIONAL NAVBAR ====================
 const AppContent = () => {
   const location = useLocation();
+  
+  // Routes where Navbar should NOT show
   const noNavbarRoutes = ["/login", "/admin-login", "/admin"];
   const shouldShowNavbar = !noNavbarRoutes.includes(location.pathname);
 
   return (
     <>
+      {/* Conditionally render Navbar */}
       {shouldShowNavbar && <Navbar />}
+      
+      {/* Page content with conditional padding for fixed navbar */}
       <div className={shouldShowNavbar ? "pt-16" : ""}>
         <Routes>
-          {/* ==================== PUBLIC ROUTES ==================== */}
+          {/* ==================== HOME & MAIN FEEDS ==================== */}
           <Route path="/" element={<Index />} />
-          <Route path="/groups" element={<Groups />} />
-
-
-       <Route path="/create-group" element={<CreateGroup />} />  {/* ✅ NEW */}
-       {/* <Route path="/groups/:id" element={<GroupDetail />} />   */}
-
-
-          <Route path="/map" element={<MapView />} />
-          <Route path="/my-events" element={<MyEvents />} />
-          {/* ✅ Your original interests page */}
-          <Route path="/interests" element={<Interests />} />
-            <Route path="/events/:id" element={<EventDetail />} />  {/* ✅ NEW: Event Detail Page */}
           
-          {/* ✅ NEW: Manage Interests (InterestSelector) at different route */}
-          <Route path="/manage-interests" element={<ManageInterests />} />
+          {/* ==================== EVENTS ==================== */}
           <Route path="/events" element={<Events />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/profile" element={<Profile />} />
+          <Route path="/events/:id" element={<EventDetail />} />
           <Route path="/create-event" element={<CreateEvent />} />
+          <Route path="/my-events" element={<MyEvents />} />
+          
+          {/* ==================== GROUPS ==================== */}
+          <Route path="/groups" element={<Groups />} />
+          <Route path="/create-group" element={<CreateGroup />} />
+          <Route path="/groups/:id" element={<GroupDetail />} />
+          <Route path="/groups/:id/settings" element={<GroupSettings />} />
+          
+          {/* ==================== MAP & LOCATION ==================== */}
+          <Route path="/map" element={<MapView />} />
+          
+          {/* ==================== INTERESTS ==================== */}
+          <Route path="/interests" element={<Interests />} />
+          <Route path="/manage-interests" element={<ManageInterests />} />
+          
+          {/* ==================== USER PROFILE & AUTH ==================== */}
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/login" element={<Login />} />
           
           {/* ==================== ADMIN ROUTES ==================== */}
           <Route path="/admin-login" element={<AdminLogin />} />
@@ -79,6 +86,7 @@ const AppContent = () => {
   );
 };
 
+// ==================== MAIN APP COMPONENT ====================
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>

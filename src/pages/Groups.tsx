@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { 
   Users, MapPin, PlusCircle, Search, Loader2, 
-  AlertCircle, ArrowLeft, UserPlus, LogOut
+  AlertCircle, ArrowLeft, UserPlus, LogOut,
+  ArrowRight
 } from "lucide-react";
 
 interface Group {
@@ -243,14 +244,20 @@ const Groups = () => {
 
                   {/* Action Buttons */}
                   <div className="flex items-center justify-between pt-3 border-t border-border">
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      className="h-8 px-2 text-muted-foreground hover:text-primary"
-                      onClick={() => navigate(`/groups/${group.id}`)}
-                    >
-                      View Details
-                    </Button>
+                    
+
+                  
+<Button 
+  size="sm" 
+  variant="ghost" 
+  className="h-8 px-2 text-muted-foreground hover:text-primary"
+  onClick={() => navigate(`/groups/${group.id}`)}  // ✅ NEW: Navigate to detail page
+>
+  View Group
+  <ArrowRight className="h-3.5 w-3.5 ml-1" />
+</Button>
+                  
+
                     <Button 
                       size="sm" 
                       onClick={() => handleJoinGroup(group.id)}
