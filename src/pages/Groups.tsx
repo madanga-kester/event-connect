@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { 
   Users, MapPin, PlusCircle, Search, Loader2, 
   AlertCircle, ArrowLeft, UserPlus, LogOut,
-  ArrowRight
+  ArrowRight, CheckCircle
 } from "lucide-react";
 
 interface Group {
@@ -37,9 +37,17 @@ const Groups = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
   const [actionInProgress, setActionInProgress] = useState<number | null>(null);
+  const [joinedGroupIds, setJoinedGroupIds] = useState<Set<number>>(new Set());
+
+  const userData = localStorage.getItem("user");
+  const currentUserId = userData ? JSON.parse(userData).id : null;
+  const authToken = localStorage.getItem("auth_token");
 
   useEffect(() => {
     fetchGroups();
+    if (currentUserId && authToken) {
+      fetchJoinedGroups();
+    }
   }, []);
 
   const fetchGroups = async () => {
@@ -61,10 +69,25 @@ const Groups = () => {
     }
   };
 
+  const fetchJoinedGroups = async () => {
+    try {
+      if (!authToken) return;
+      const response = await fetch(`${API_BASE}/groups/my-groups`, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const joinedIds = new Set<number>(data.map((g: any) => g.id));
+        setJoinedGroupIds(joinedIds);
+      }
+    } catch (err) {
+      console.error("Failed to fetch joined groups:", err);
+    }
+  };
+
   const handleJoinGroup = async (groupId: number) => {
-    const token = localStorage.getItem("auth_token");
-    
-    if (!token) {
+    if (!authToken) {
       navigate("/login", { state: { from: "/groups" } });
       return;
     }
@@ -73,20 +96,22 @@ const Groups = () => {
       setActionInProgress(groupId);
       const response = await fetch(`${API_BASE}/groups/${groupId}/join`, {
         method: "POST",
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: { "Authorization": `Bearer ${authToken}` }
       });
 
       if (!response.ok) {
-        throw new Error("Failed to join group");
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.message || "Failed to join group");
       }
 
       // Update local state
       setGroups(prev => prev.map(g => 
         g.id === groupId ? { ...g, memberCount: g.memberCount + 1 } : g
       ));
-    } catch (err) {
+      setJoinedGroupIds(prev => new Set(prev).add(groupId));
+    } catch (err: any) {
       console.error("Join failed:", err);
-      alert("Failed to join group. Please try again.");
+      alert(err.message || "Failed to join group. Please try again.");
     } finally {
       setActionInProgress(null);
     }
@@ -190,91 +215,105 @@ const Groups = () => {
         ) : (
           /* Groups Grid */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredGroups.map((group) => (
-              <Card key={group.id} className="group overflow-hidden border-border bg-card hover:border-primary/50 transition-all">
-                {/* Group Cover Image */}
-                <div className="relative h-32 overflow-hidden bg-gradient-to-br from-primary/20 to-primary/5">
-                  {group.coverImage ? (
-                    <img
-                      src={group.coverImage}
-                      alt={group.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = "https://via.placeholder.com/400x200?text=Group";
-                      }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Users className="h-12 w-12 text-primary/40" />
-                    </div>
-                  )}
-                </div>
-
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-foreground line-clamp-1 group-hover:text-primary transition-colors">
-                      {group.name}
-                    </h3>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="pb-4">
-                  <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-                    {group.description || "No description available"}
-                  </p>
-                  
-                  <div className="space-y-1.5 text-xs text-muted-foreground mb-4">
-                    {(group.city || group.country) && (
-                      <div className="flex items-center gap-1.5">
-                        <MapPin className="h-3.5 w-3.5" />
-                        <span>{[group.city, group.country].filter(Boolean).join(", ")}</span>
+            {filteredGroups.map((group) => {
+              const isJoined = joinedGroupIds.has(group.id);
+              
+              return (
+                <Card key={group.id} className="group overflow-hidden border-border bg-card hover:border-primary/50 transition-all">
+                  {/* Group Cover Image */}
+                  <div className="relative h-32 overflow-hidden bg-gradient-to-br from-primary/20 to-primary/5">
+                    {group.coverImage ? (
+                      <img
+                        src={group.coverImage}
+                        alt={group.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "https://via.placeholder.com/400x200?text=Group";
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Users className="h-12 w-12 text-primary/40" />
                       </div>
                     )}
-                    <div className="flex items-center gap-1.5">
-                      <Users className="h-3.5 w-3.5" />
-                      <span>{group.memberCount} members</span>
-                    </div>
-                    {group.organizer && (
-                      <div className="flex items-center gap-1.5">
-                        <UserPlus className="h-3.5 w-3.5" />
-                        <span>Organized by {group.organizer.firstName} {group.organizer.lastName}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex items-center justify-between pt-3 border-t border-border">
                     
-
-                  
-<Button 
-  size="sm" 
-  variant="ghost" 
-  className="h-8 px-2 text-muted-foreground hover:text-primary"
-  onClick={() => navigate(`/groups/${group.id}`)}  // ✅ NEW: Navigate to detail page
->
-  View Group
-  <ArrowRight className="h-3.5 w-3.5 ml-1" />
-</Button>
-                  
-
-                    <Button 
-                      size="sm" 
-                      onClick={() => handleJoinGroup(group.id)}
-                      disabled={actionInProgress === group.id}
-                      className="gap-1.5"
-                    >
-                      {actionInProgress === group.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Users className="h-4 w-4" />
-                      )}
-                      Join
-                    </Button>
+                    {/* Already Joined Badge */}
+                    {isJoined && (
+                      <Badge className="absolute top-3 right-3 bg-green-500/90 text-white border-0">
+                        <CheckCircle className="h-3 w-3 mr-1" /> Joined
+                      </Badge>
+                    )}
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-semibold text-foreground line-clamp-1 group-hover:text-primary transition-colors">
+                        {group.name}
+                      </h3>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="pb-4">
+                    <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+                      {group.description || "No description available"}
+                    </p>
+                    
+                    <div className="space-y-1.5 text-xs text-muted-foreground mb-4">
+                      {(group.city || group.country) && (
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5" />
+                          <span>{[group.city, group.country].filter(Boolean).join(", ")}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1.5">
+                        <Users className="h-3.5 w-3.5" />
+                        <span>{group.memberCount} members</span>
+                      </div>
+                      {group.organizer && (
+                        <div className="flex items-center gap-1.5">
+                          <UserPlus className="h-3.5 w-3.5" />
+                          <span>Organized by {group.organizer.firstName} {group.organizer.lastName}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center justify-between pt-3 border-t border-border">
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="h-8 px-2 text-muted-foreground hover:text-primary"
+                        onClick={() => navigate(`/groups/${group.id}`)}
+                      >
+                        View Group
+                        <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                      </Button>
+                      
+                      {isJoined ? (
+                        <Badge variant="secondary" className="gap-1.5">
+                          <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                          Joined
+                        </Badge>
+                      ) : (
+                        <Button 
+                          size="sm" 
+                          onClick={() => handleJoinGroup(group.id)}
+                          disabled={actionInProgress === group.id}
+                          className="gap-1.5"
+                        >
+                          {actionInProgress === group.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Users className="h-4 w-4" />
+                          )}
+                          Join
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
