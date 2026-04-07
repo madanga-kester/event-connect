@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { 
   Users, MapPin, PlusCircle, Search, Loader2, 
   AlertCircle, ArrowLeft, UserPlus, LogOut,
-  ArrowRight, CheckCircle
+  ArrowRight, CheckCircle, Crown
 } from "lucide-react";
 
 interface Group {
@@ -17,8 +17,10 @@ interface Group {
   coverImage?: string;
   organizerId: number;
   organizer?: {
+    id: number;
     firstName: string;
     lastName: string;
+    profilePicture?: string;
   };
   city?: string;
   country?: string;
@@ -60,7 +62,12 @@ const Groups = () => {
       }
 
       const data = await response.json();
-      setGroups(data || []);
+      // Ensure memberCount is always a valid number with fallback
+      const groupsWithCount = (data || []).map((g: any) => ({
+        ...g,
+        memberCount: typeof g.memberCount === "number" && g.memberCount >= 0 ? g.memberCount : 0
+      }));
+      setGroups(groupsWithCount);
     } catch (err) {
       console.error("Failed to fetch groups:", err);
       setError("Could not load groups. Please try again.");
@@ -104,9 +111,8 @@ const Groups = () => {
         throw new Error(errData.message || "Failed to join group");
       }
 
-      // Update local state
       setGroups(prev => prev.map(g => 
-        g.id === groupId ? { ...g, memberCount: g.memberCount + 1 } : g
+        g.id === groupId ? { ...g, memberCount: (g.memberCount || 0) + 1 } : g
       ));
       setJoinedGroupIds(prev => new Set(prev).add(groupId));
     } catch (err: any) {
@@ -217,6 +223,7 @@ const Groups = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredGroups.map((group) => {
               const isJoined = joinedGroupIds.has(group.id);
+              const memberCount = typeof group.memberCount === "number" ? group.memberCount : 0;
               
               return (
                 <Card key={group.id} className="group overflow-hidden border-border bg-card hover:border-primary/50 transition-all">
@@ -258,21 +265,30 @@ const Groups = () => {
                       {group.description || "No description available"}
                     </p>
                     
-                    <div className="space-y-1.5 text-xs text-muted-foreground mb-4">
+                    <div className="space-y-2 mb-4">
+                      {/* Location */}
                       {(group.city || group.country) && (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <MapPin className="h-3.5 w-3.5" />
                           <span>{[group.city, group.country].filter(Boolean).join(", ")}</span>
                         </div>
                       )}
-                      <div className="flex items-center gap-1.5">
-                        <Users className="h-3.5 w-3.5" />
-                        <span>{group.memberCount} members</span>
+                      
+                      {/* MEMBER COUNT - PROMINENT DISPLAY */}
+                      <div className="flex items-center gap-2 py-1">
+                        <Users className="h-4 w-4 text-primary" />
+                        <span className="font-bold text-sm text-foreground">
+                          {memberCount} {memberCount === 1 ? "member" : "members"}
+                        </span>
                       </div>
+                      
+                      {/* Organizer */}
                       {group.organizer && (
-                        <div className="flex items-center gap-1.5">
-                          <UserPlus className="h-3.5 w-3.5" />
-                          <span>Organized by {group.organizer.firstName} {group.organizer.lastName}</span>
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <Crown className="h-3.5 w-3.5 text-amber-500" />
+                          <span className="font-medium text-muted-foreground">
+                            {group.organizer.firstName} {group.organizer.lastName}
+                          </span>
                         </div>
                       )}
                     </div>
