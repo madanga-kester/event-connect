@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,15 +9,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton"; // Added for better loading states
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users, MapPin, Calendar, Share2, ArrowLeft, Loader2,
   AlertCircle, CheckCircle, UserPlus, LogOut, Trash2, Settings, X, Save, Plus, ListChecks,
   Image as ImageIcon, Crown, Shield, UserMinus, MessageSquare,
   Sparkles, Link2, ArrowUp, Clock, Camera, UserCheck, TrendingUp, Globe, ChevronDown, ChevronUp, FileText, Trash, Eye, EyeOff
 } from "lucide-react";
-import { motion } from "framer-motion"; // Added for animations
-import { toast } from "sonner"; // Added for modern notifications
+import { motion } from "framer-motion";
+import { toast } from "sonner";
 import GroupChat from "@/components/GroupChat";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5260/api";
@@ -131,6 +130,7 @@ interface GalleryItem {
 }
 
 const GroupDetail = () => {
+  
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -143,20 +143,21 @@ const GroupDetail = () => {
   const [isMember, setIsMember] = useState(false);
   const [isOrganizer, setIsOrganizer] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
+  const [pendingRequestLoading, setPendingRequestLoading] = useState(false);
+
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [showRequestsModal, setShowRequestsModal] = useState(false);
-
-
   const [showCoverModal, setShowCoverModal] = useState(false);
   const [showCopiedToast, setShowCopiedToast] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
-  // Mobile Tab State
   const [mobileActiveTab, setMobileActiveTab] = useState<"about" | "rules" | "activity" | "discussions" | "gallery" | "chat">("about");
+  const [joinRequestStatus, setJoinRequestStatus] = useState<'none' | 'pending' | 'rejected'>('none');
 
-  // Edit Group Modal State - REQUIRED for Edit functionality
   const [showEditModal, setShowEditModal] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [editFormData, setEditFormData] = useState({
@@ -176,12 +177,6 @@ const GroupDetail = () => {
   const [editNewRule, setEditNewRule] = useState({ title: "", description: "" });
   const [editImagePreview, setEditImagePreview] = useState<string | null>(null);
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
-  // const [showCoverModal, setShowCoverModal] = useState(false);
-  // const [showCopiedToast, setShowCopiedToast] = useState(false);
-  // const [showBackToTop, setShowBackToTop] = useState(false);
-
-  // // Mobile Tab State
-  // const [mobileActiveTab, setMobileActiveTab] = useState<"about" | "rules" | "activity" | "discussions" | "gallery" | "chat">("about");
 
   const [settings, setSettings] = useState<GroupSettings>({
     isPrivate: false,
@@ -221,6 +216,42 @@ const GroupDetail = () => {
   const currentUserId = userData ? JSON.parse(userData).id : null;
   const authToken = localStorage.getItem("auth_token");
 
+  const checkPendingRequest = useCallback(async (groupId: string) => {
+    if (!currentUserId || !authToken || isMember || isOrganizer) return;
+    
+    try {
+      setPendingRequestLoading(true);
+      
+      const groupResponse = await fetch(`${API_BASE}/groups/${groupId}`);
+      if (!groupResponse.ok) return;
+      
+      const groupData: Group = await groupResponse.json();
+      const isPrivate = groupData.isPrivate || groupData.settings?.isPrivate;
+      
+      if (!isPrivate) {
+        setHasPendingRequest(false);
+        return;
+      }
+      
+      const response = await fetch(`${API_BASE}/groups/${groupId}/join-requests/pending`, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      
+      if (response.ok) {
+        const requests: PendingRequest[] = await response.json();
+        const userHasPending = requests.some(req => req.user.id === currentUserId);
+        setHasPendingRequest(userHasPending);
+      } else if (response.status === 401) {
+        setHasPendingRequest(false);
+      }
+    } catch (err) {
+      console.error("Failed to check pending requests:", err);
+      setHasPendingRequest(false);
+    } finally {
+      setPendingRequestLoading(false);
+    }
+  }, [currentUserId, authToken, isMember, isOrganizer]);
+
   const fetchGroup = useCallback(async (groupId: string) => {
     try {
       setLoading(true);
@@ -229,17 +260,9 @@ const GroupDetail = () => {
 
       const data: Group = await response.json();
       setGroup(data);
-      
       if (data.coverImage) {
         setCoverImage(data.coverImage);
-        // Fixed bug: only set coverImageUrl if it's actually a URL
-        if (data.coverImage.startsWith("http")) {
-          setCoverImageUrl(data.coverImage);
-        }
-      }
-      
-      if (data.settings) {
-        setSettings(data.settings);
+        if (!data.coverImage.startsWith("data:")) setCoverImageUrl(data.coverImage);
       }
 
       if (currentUserId) {
@@ -247,13 +270,14 @@ const GroupDetail = () => {
         setIsOrganizer(isOrg);
         setIsMember(data.groupMembers?.some((m: any) => m.userId === currentUserId && m.isActive) || false);
 
+        if (!isOrg && !isMember) {
+          await checkJoinRequestStatus(parseInt(groupId));
+        }
+
         if (isOrg) {
-          // Replaced setTimeout with proper await sequence
-          await Promise.all([
-            fetchSettings(parseInt(groupId)),
-            fetchMembers(parseInt(groupId)),
-            fetchPendingRequests(parseInt(groupId))
-          ]);
+          fetchSettings(parseInt(groupId));
+          fetchMembers(parseInt(groupId));
+          fetchPendingRequests(parseInt(groupId));
         }
       }
     } catch (err: any) {
@@ -262,6 +286,132 @@ const GroupDetail = () => {
       setLoading(false);
     }
   }, [currentUserId]);
+
+  // // ✅ FIXED: Properly detects membership, handles public groups, avoids rejected state for public
+  // const checkJoinRequestStatus = async (groupId: number) => {
+  //   try {
+  //     const token = localStorage.getItem("auth_token");
+  //     if (!token || !currentUserId) return;
+
+  //     const groupResponse = await fetch(`${API_BASE}/groups/${groupId}`);
+  //     if (!groupResponse.ok) return;
+  //     const groupData: Group = await groupResponse.json();
+      
+  //     // ✅ If user is member → show joined state (handles approved status)
+  //     const isMemberCheck = groupData.groupMembers?.some(
+  //       (m: any) => m.userId === currentUserId && m.isActive
+  //     );
+  //     if (isMemberCheck) {
+  //       setJoinRequestStatus("none");
+  //       setHasPendingRequest(false);
+  //       return;
+  //     }
+
+  //     // ✅ Public groups: NO rejected state possible - just show join button
+  //     const isPrivate = groupData.isPrivate || groupData.settings?.isPrivate;
+  //     if (!isPrivate) {
+  //       setJoinRequestStatus("none");
+  //       setHasPendingRequest(false);
+  //       return;
+  //     }
+
+  //     // ✅ Private groups only: check pending requests
+  //     const pendingResponse = await fetch(`${API_BASE}/groups/${groupId}/join-requests/pending`, {
+  //       headers: { Authorization: `Bearer ${token}` }
+  //     });
+      
+  //     if (pendingResponse.ok) {
+  //       const pendingRequests: PendingRequest[] = await pendingResponse.json();
+  //       const hasPending = pendingRequests.some(req => req.user.id === currentUserId);
+        
+  //       if (hasPending) {
+  //         setJoinRequestStatus("pending");
+  //         setHasPendingRequest(true);
+  //         return;
+  //       }
+  //     }
+
+  //     // ✅ Private group, not member, not pending = assume rejected
+  //     setJoinRequestStatus("rejected");
+  //     setHasPendingRequest(false);
+
+  //   } catch (err) {
+  //     setJoinRequestStatus("none");
+  //     setHasPendingRequest(false);
+  //   }
+  // };
+const checkJoinRequestStatus = async (groupId: number) => {
+  try {
+    const token = localStorage.getItem("auth_token");
+    if (!token || !currentUserId) return;
+
+    // ✅ Step 1: Fetch the dedicated status endpoint
+    // This tells us EXACTLY if pending, rejected, or none
+    const statusResponse = await fetch(`${API_BASE}/groups/${groupId}/join-status`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (statusResponse.ok) {
+      const data = await statusResponse.json();
+      const status = data.status; // "member", "pending", "rejected", or "none"
+
+      if (status === "member") {
+        setIsMember(true);
+        setJoinRequestStatus("none");
+        setHasPendingRequest(false);
+      } else if (status === "pending") {
+        setIsMember(false);
+        setJoinRequestStatus("pending");
+        setHasPendingRequest(true);
+      } else if (status === "rejected") {
+        setIsMember(false);
+        setJoinRequestStatus("rejected");
+        setHasPendingRequest(false);
+      } else {
+        // "none"
+        setIsMember(false);
+        setJoinRequestStatus("none");
+        setHasPendingRequest(false);
+      }
+      return;
+    }
+
+    // ✅ Fallback if endpoint fails (older backend version)
+    // Default to "none" (Request to Join) instead of "rejected"
+    setJoinRequestStatus("none");
+    setHasPendingRequest(false);
+
+  } catch (err) {
+    console.error("Failed to check join status:", err);
+    // On error, default to safe state: Request to Join
+    setJoinRequestStatus("none");
+    setHasPendingRequest(false);
+  }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   const fetchSettings = async (groupId: number) => {
     try {
@@ -368,54 +518,179 @@ const GroupDetail = () => {
     }
   }, []);
 
+  // ✅ FIXED: Polling only for private groups, properly detects approved/rejected
+  useEffect(() => {
+    const isGroupPrivateSafe = group?.isPrivate || settings.isPrivate;
+    
+    if (!id || !isGroupPrivateSafe || isMember || isOrganizer || joinRequestStatus !== "pending") return;
+    
+    const pollInterval = setInterval(async () => {
+      try {
+        const token = localStorage.getItem("auth_token");
+        if (!token) return;
+        
+        // ✅ Check if user is now a member (approved case - fixes approved status showing rejected)
+        const groupResponse = await fetch(`${API_BASE}/groups/${id}`);
+        if (groupResponse.ok) {
+          const groupData: Group = await groupResponse.json();
+          const isNowMember = groupData.groupMembers?.some(
+            (m: any) => m.userId === currentUserId && m.isActive
+          );
+          
+          if (isNowMember) {
+            setJoinRequestStatus("none");
+            setHasPendingRequest(false);
+            setIsMember(true);
+            await fetchGroup(id);
+            toast.success("Welcome to the group!", {
+              description: "Your request was approved.",
+              icon: <CheckCircle className="h-4 w-4" />
+            });
+            return;
+          }
+        }
+        
+        // ✅ Check if request is still pending or was rejected
+        const pendingResponse = await fetch(`${API_BASE}/groups/${id}/join-requests/pending`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (pendingResponse.ok) {
+          const pendingRequests: PendingRequest[] = await pendingResponse.json();
+          const stillPending = pendingRequests.some(req => req.user.id === currentUserId);
+          
+          if (!stillPending && joinRequestStatus === "pending") {
+            setJoinRequestStatus("rejected");
+            setHasPendingRequest(false);
+            toast.info("Join request was rejected", {
+              description: "You can re-apply if the group allows it.",
+              icon: <AlertCircle className="h-4 w-4" />
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+    }, 15000);
+    
+    return () => clearInterval(pollInterval);
+  }, [id, group, settings.isPrivate, isMember, isOrganizer, joinRequestStatus, fetchGroup, currentUserId]);
+
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
   const scrollToSection = (sectionId: string) => {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    setMobileActiveTab("about"); // Reset mobile tab if they click sidebar nav
+    setMobileActiveTab("about");
   };
 
+  // ✅ FIXED: Handles all join scenarios, respects public/private, proper state updates
   const handleJoinGroup = async () => {
     if (!authToken) {
       navigate("/login", { state: { from: `/groups/${id}` } });
       return;
     }
 
+    if (joinRequestStatus === "pending") {
+      toast.info("Request already pending", {
+        description: "Wait for organizer approval."
+      });
+      return;
+    }
+
     try {
       setActionLoading(true);
       
-      const isPrivate = group?.isPrivate === true || settings.isPrivate === true;
+      const response = await fetch(`${API_BASE}/groups/${id}/join`, {
+        method: "POST",
+        headers: { 
+          "Authorization": `Bearer ${authToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ groupId: parseInt(id!) })
+      });
       
-      if (isPrivate) {
-        const response = await fetch(`${API_BASE}/groups/${id}/join-request`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authToken}`
-          },
-          body: JSON.stringify({ message: "I would like to join this group" })
-        });
-        
-        const result = await response.json();
-        if (result.isSuccess) {
-          toast.success("Join request sent!", { description: "Wait for organizer approval." });
+      if (response.status === 401) {
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("user");
+        toast.error("Session expired. Please log in again.");
+        navigate("/login");
+        return;
+      }
+      
+      const contentType = response.headers.get("content-type");
+      let result;
+      if (contentType?.includes("application/json")) {
+        result = await response.json();
+      } else {
+        const text = await response.text();
+        throw new Error(`Server returned ${response.status}: ${text.substring(0, 100)}`);
+      }
+
+      console.log("✅ JoinGroup API response:", result);
+
+      if (result.isSuccess) {
+        if (result.isPending || result.status === "pending") {
+          setJoinRequestStatus("pending");
+          setHasPendingRequest(true);
+          toast.success("Join request sent!", { 
+            description: "Wait for organizer approval.",
+            icon: <AlertCircle className="h-4 w-4" />
+          });
         } else {
-          toast.error(result.message || "Failed to send request");
+          setIsMember(true);
+          setJoinRequestStatus("none");
+          setGroup(prev => prev ? { ...prev, memberCount: (prev.memberCount || 0) + 1 } : null);
+          toast.success("Joined group successfully!", { 
+            icon: <UserCheck className="h-4 w-4" /> 
+          });
         }
       } else {
-        const response = await fetch(`${API_BASE}/groups/${id}/join`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${authToken}` }
-        });
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.message || "Failed to join");
+        if (result.message?.toLowerCase().includes("pending") || result.status === "pending") {
+          setJoinRequestStatus("pending");
+          setHasPendingRequest(true);
+        } else if (result.message?.toLowerCase().includes("rejected")) {
+          setJoinRequestStatus("rejected");
         }
-        setIsMember(true);
-        setGroup(prev => prev ? { ...prev, memberCount: (prev.memberCount || 0) + 1 } : null);
-        toast.success("Joined group successfully!", { icon: <UserCheck /> });
+        toast.error(result.message || "Failed to process request");
       }
     } catch (err: any) {
-      toast.error(err.message || "Failed to process request.");
+      console.error("Join error:", err);
+      
+      if (err.message?.includes("duplicate key") || err.message?.includes("IX_GroupJoinRequests")) {
+        setJoinRequestStatus("rejected");
+        setHasPendingRequest(false);
+        toast.info("Request was previously rejected", {
+          description: "Click 'Re-apply' to submit a new request.",
+          icon: <AlertCircle className="h-4 w-4" />
+        });
+        return;
+      }
+      
+      if (err.message?.includes("Server returned 500")) {
+        toast.error("Server error while joining group", {
+          description: "Our team has been notified. Please try again in a moment.",
+          action: {
+            label: "Retry",
+            onClick: () => handleJoinGroup()
+          },
+          duration: 10000
+        });
+      } else if (err.message?.includes("401")) {
+        toast.error("Session expired", {
+          description: "Please log in again to continue",
+          action: {
+            label: "Log In",
+            onClick: () => navigate("/login", { state: { from: `/groups/${id}` } })
+          }
+        });
+      } else if (err.message?.includes("already a member")) {
+        toast.info("You're already a member!", {
+          description: "Redirecting to group...",
+          duration: 3000
+        });
+        setIsMember(true);
+      } else {
+        toast.error(err.message || "Unable to join group. Please try again.");
+      }
     } finally {
       setActionLoading(false);
     }
@@ -634,20 +909,37 @@ const GroupDetail = () => {
     try {
       setActionLoading(true);
       if (!authToken) return;
-      const payload = coverImageTab === "url" ? { coverImage: coverImageUrl } : { coverImage };
+      const imageValue = coverImageTab === "url" ? coverImageUrl : coverImage;
+      
+      if (!imageValue) {
+        toast.error("No cover image selected");
+        return;
+      }
+      
+      const payload = { coverImage: imageValue };
+ 
       const response = await fetch(`${API_BASE}/groups/${id}/cover-image`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
         body: JSON.stringify(payload)
       });
-      const result = await response.json();
+
+      const contentType = response.headers.get("content-type");
+      let result;
+      if (contentType?.includes("application/json")) {
+        result = await response.json();
+      } else {
+        result = { isSuccess: response.ok, message: response.ok ? "Success" : "Failed" };
+      }
+      
       if (result.isSuccess) {
         toast.success("Cover updated successfully");
         setShowCoverModal(false);
-        fetchGroup(id);
+        await fetchGroup(id!);
       } else {
         toast.error(result.message || "Failed to update cover image");
       }
+      
     } catch (err) {
       toast.error("Network error.");
     } finally {
@@ -671,8 +963,7 @@ const GroupDetail = () => {
   const getInitials = (firstName: string, lastName: string) => {
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
   };
-
-  // Skeleton Loader for 2025 UX
+    // Skeleton Loader
   if (loading) {
     return (
       <div className="min-h-screen bg-background pt-16">
@@ -728,11 +1019,12 @@ const GroupDetail = () => {
     );
   }
 
-  const isGroupPrivate = group.isPrivate || settings.isPrivate;
+  // ✅ Define isGroupPrivate AFTER early returns
+  const isGroupPrivate = group?.isPrivate || settings.isPrivate;
 
   return (
     <div ref={pageRef} className="min-h-screen bg-background">
-      {/* Cover Image - Enhanced Layout */}
+      {/* Cover Image */}
       <div className="relative">
         <div
           className="relative h-64 md:h-96 w-full overflow-hidden group cursor-pointer"
@@ -756,7 +1048,6 @@ const GroupDetail = () => {
             </div>
           )}
 
-          {/* Top Overlay Actions */}
           <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-20">
             <Button
               variant="secondary"
@@ -792,7 +1083,7 @@ const GroupDetail = () => {
         </div>
       </div>
 
-      {/* Main Container - Sticky Sidebar Layout */}
+      {/* Main Container */}
       <div className="container mx-auto px-4 py-10 max-w-7xl -mt-12 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
@@ -868,89 +1159,106 @@ const GroupDetail = () => {
                   )}
 
 
+                 <div className="flex flex-col sm:flex-row gap-4">
+  {isOrganizer ? (
+    <>
+      <Button 
+        size="lg" 
+        variant="outline" 
+        onClick={() => { 
+          setEditFormData({
+            name: group.name || "",
+            description: group.description || "",
+            city: group.city || "",
+            country: group.country || "",
+            location: "",
+            isPrivate: group.isPrivate || settings.isPrivate || false,
+            allowMemberInvites: settings.allowMemberInvites ?? true,
+            allowMemberPosts: settings.allowMemberPosts ?? true,
+            moderateMessages: settings.moderateMessages ?? false,
+            maxMembers: "",
+            coverImage: group.coverImage || "",
+          });
+          setEditRules(group.groupMembers ? [] : []);
+          if (group.coverImage) setEditImagePreview(group.coverImage);
+          setShowEditModal(true);
+        }} 
+        className="flex-1"
+      >
+        <Settings className="mr-2 h-4 w-4" /> Edit Group
+      </Button>
+      <Button 
+        size="lg" 
+        variant="outline" 
+        onClick={() => setShowSettingsModal(true)} 
+        className="flex-1"
+      >
+        <Settings className="mr-2 h-4 w-4" /> Manage Settings
+      </Button>
+      <Button 
+        size="lg" 
+        variant="destructive" 
+        onClick={handleDeleteGroup} 
+        disabled={actionLoading}
+      >
+        <Trash2 className="mr-2 h-4 w-4" /> Delete
+      </Button>
+    </>
+  ) : isMember ? (
+    <Button 
+      size="lg" 
+      variant="outline" 
+      onClick={handleLeaveGroup} 
+      disabled={actionLoading}
+    >
+      <LogOut className="mr-2 h-4 w-4" /> Leave Group
+    </Button>
+  ) : (
+    // ✅ FIXED: Non-member, non-organizer button logic
+    <Button 
+      size="lg" 
+      onClick={handleJoinGroup} 
+      disabled={actionLoading || joinRequestStatus === "pending"} 
+      className="flex-1"
+      variant={
+        joinRequestStatus === "pending" ? "secondary" : 
+        joinRequestStatus === "rejected" ? "outline" : 
+        "default"
+      }
+    >
+      {/* Loading state */}
+      {actionLoading && joinRequestStatus === "none" ? (
+        <>
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
+          Processing...
+        </>
+      ) : joinRequestStatus === "pending" ? (
+        // ✅ Pending state (private groups only)
+        <>
+          <Clock className="mr-2 h-4 w-4 text-yellow-600" /> 
+          Request Sent
+        </>
+      ) : joinRequestStatus === "rejected" ? (
+        // ✅ Rejected state (private groups only)
+        <>
+          <AlertCircle className="mr-2 h-4 w-4 text-destructive" /> 
+          Request Rejected • Re-apply
+        </>
+      ) : (
+        // ✅ Default state: Join or Request to Join
+        <>
+          <UserPlus className="mr-2 h-4 w-4" /> 
+          {isGroupPrivate ? "Request to Join" : "Join Group"}
+        </>
+      )}
+    </Button>
+  )}
+</div>
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                <div className="flex flex-col sm:flex-row gap-4">
-                    {isOrganizer ? (
-                      <>
-                        <Button size="lg" variant="outline" onClick={() => { 
-                          // Pre-fill edit form with existing group data
-                          setEditFormData({
-                            name: group.name || "",
-                            description: group.description || "",
-                            city: group.city || "",
-                            country: group.country || "",
-                            location: "", // Not stored in group, leave empty or fetch from events
-                            isPrivate: group.isPrivate || settings.isPrivate || false,
-                            allowMemberInvites: settings.allowMemberInvites ?? true,
-                            allowMemberPosts: settings.allowMemberPosts ?? true,
-                            moderateMessages: settings.moderateMessages ?? false,
-                            maxMembers: "",
-                            coverImage: group.coverImage || "",
-                          });
-                          setEditRules(group.groupMembers ? [] : []); // Will fetch rules separately if needed
-                          if (group.coverImage) setEditImagePreview(group.coverImage);
-                          setShowEditModal(true);
-                        }} className="flex-1">
-                          <Settings className="mr-2 h-4 w-4" /> Edit Group
-                        </Button>
-                        <Button size="lg" variant="outline" onClick={() => setShowSettingsModal(true)} className="flex-1">
-                          <Settings className="mr-2 h-4 w-4" /> Manage Settings
-                        </Button>
-                        <Button size="lg" variant="destructive" onClick={handleDeleteGroup} disabled={actionLoading}>
-                          <Trash2 className="mr-2 h-4 w-4" /> Delete
-                        </Button>
-                      </>
-                    ) : isMember ? (
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                      <Button size="lg" variant="outline" onClick={handleLeaveGroup} disabled={actionLoading}>
-                        <LogOut className="mr-2 h-4 w-4" /> Leave Group
-                      </Button>
-                    ) : (
-                      <Button size="lg" onClick={handleJoinGroup} disabled={actionLoading} className="flex-1">
-                        <UserPlus className="mr-2 h-4 w-4" /> {isGroupPrivate ? "Request to Join" : "Join Group"}
-                      </Button>
-                    )}
-                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -987,39 +1295,6 @@ const GroupDetail = () => {
                     ) : (
                       <p className="text-muted-foreground">No guidelines have been added yet.</p>
                     )}
-
-
-                    {/* Organizer-only: Add New Rule Form
-                    {isOrganizer && (
-                      <div className="pt-4 border-t mt-4">
-                        <h4 className="font-medium mb-3 flex items-center gap-2">
-                          <Plus className="h-4 w-4" /> Add New Guideline
-                        </h4>
-                        <div className="space-y-3">
-                          <Input
-                            placeholder="Rule title (e.g., 'Be respectful')"
-                            value={newRule.title}
-                            onChange={(e) => setNewRule(prev => ({ ...prev, title: e.target.value }))}
-                            maxLength={100}
-                          />
-                          <Input
-                            placeholder="Description (optional)"
-                            value={newRule.description}
-                            onChange={(e) => setNewRule(prev => ({ ...prev, description: e.target.value }))}
-                            maxLength={250}
-                          />
-                          <Button 
-                            size="sm" 
-                            onClick={handleAddRule}
-                            disabled={!newRule.title.trim()}
-                            className="w-full sm:w-auto"
-                          >
-                            <Plus className="h-4 w-4 mr-2" /> Add Rule
-                          </Button>
-                        </div>
-                      </div>
-                    )} */}
-
                   </CardContent>
                 </Card>
               </motion.div>
@@ -1179,7 +1454,7 @@ const GroupDetail = () => {
             )}
           </div>
 
-          {/* Sidebar Column - Sticky on Desktop */}
+          {/* Sidebar Column */}
           <div className="lg:sticky lg:top-24 lg:self-start space-y-6">
             {/* Desktop Section Navigation */}
             <Card className="hidden lg:block shadow-sm">
@@ -1254,7 +1529,22 @@ const GroupDetail = () => {
                         {members.slice(0, 5).map((member) => (
                           <div key={member.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
                             <Avatar className="h-8 w-8">
-                              <AvatarImage src={member.user.profilePicture} />
+                              <AvatarImage 
+                                src={
+                                  member.user.profilePicture && 
+                                  !member.user.profilePicture.startsWith('blob:') && 
+                                  (member.user.profilePicture.startsWith('http') || member.user.profilePicture.startsWith('data:'))
+                                    ? member.user.profilePicture 
+                                    : `https://ui-avatars.com/api/?name=${encodeURIComponent(member.user.firstName + ' ' + member.user.lastName)}&background=random&color=fff&size=128`
+                                }
+                                alt={`${member.user.firstName} ${member.user.lastName}`}
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  if (!target.src.includes('ui-avatars.com')) {
+                                    target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(member.user.firstName + ' ' + member.user.lastName)}&background=random&color=fff&size=128`;
+                                  }
+                                }}
+                              />
                               <AvatarFallback>{getInitials(member.user.firstName, member.user.lastName)}</AvatarFallback>
                             </Avatar>
                             <p className="text-sm truncate">{member.user.firstName} {member.user.lastName}</p>
@@ -1344,18 +1634,7 @@ const GroupDetail = () => {
                 <Button variant="ghost" size="icon" onClick={() => setShowSettingsModal(false)}><X className="h-4 w-4" /></Button>
               </div>
             </CardHeader>
-
-
-
-
-
-
-
-
-
-
-
-                        <CardContent className="pt-6 space-y-8">
+            <CardContent className="pt-6 space-y-8">
               {/* Membership Settings */}
               <div>
                 <h3 className="font-semibold mb-4 flex items-center gap-2"><Users className="h-5 w-5" /> Membership</h3>
@@ -1405,11 +1684,10 @@ const GroupDetail = () => {
 
               <Separator />
 
-              {/* Group Rules Management - NEW SECTION */}
+              {/* Group Rules Management */}
               <div>
                 <h3 className="font-semibold mb-4 flex items-center gap-2"><ListChecks className="h-5 w-5" /> Group Guidelines</h3>
                 
-                {/* Existing Rules List */}
                 <div className="space-y-3 mb-4 max-h-48 overflow-y-auto pr-2">
                   {rules.length > 0 ? (
                     rules.map((rule) => (
@@ -1448,7 +1726,6 @@ const GroupDetail = () => {
                   )}
                 </div>
                 
-                {/* Add New Rule Form */}
                 <div className="space-y-3 p-3 bg-muted/20 rounded-lg border">
                   <Input
                     placeholder="Rule title (e.g., 'Be respectful')"
@@ -1475,7 +1752,6 @@ const GroupDetail = () => {
                 </div>
               </div>
 
-              {/* Save/Cancel Buttons */}
               <div className="flex justify-end gap-3 pt-4 border-t">
                 <Button variant="outline" onClick={() => setShowSettingsModal(false)}>Cancel</Button>
                 <Button onClick={handleSaveSettings} disabled={savingSettings}>
@@ -1484,15 +1760,6 @@ const GroupDetail = () => {
                 </Button>
               </div>
             </CardContent>
-
-
-
-
-
-
-
-
-
           </Card>
         </div>
       )}
@@ -1682,51 +1949,6 @@ const GroupDetail = () => {
         </div>
       )}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
       {/* Gallery Popup */}
       {showGalleryPopup && isMember && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowGalleryPopup(false)}>
@@ -1739,7 +1961,7 @@ const GroupDetail = () => {
         </div>
       )}
 
-      {/* Edit Group Modal - FIXED: Now properly nested inside main return */}
+      {/* Edit Group Modal */}
       {showEditModal && isOrganizer && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1868,7 +2090,6 @@ const GroupDetail = () => {
               {/* Group Rules */}
               <div className="space-y-4">
                 <h3 className="font-semibold flex items-center gap-2"><ListChecks className="h-5 w-5" /> Group Guidelines</h3>
-                {/* Existing Rules */}
                 <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
                   {editRules.length > 0 ? (
                     editRules.map((rule, idx) => (
@@ -1886,7 +2107,6 @@ const GroupDetail = () => {
                     <p className="text-sm text-muted-foreground text-center py-4">No custom rules set</p>
                   )}
                 </div>
-                {/* Add New Rule */}
                 <div className="flex gap-2">
                   <Input
                     placeholder="New rule title"
@@ -1904,7 +2124,6 @@ const GroupDetail = () => {
                 </div>
               </div>
 
-              {/* Cover Image Preview */}
               {editImagePreview && (
                 <div className="space-y-2">
                   <Label>Cover Image Preview</Label>
@@ -1914,7 +2133,6 @@ const GroupDetail = () => {
                 </div>
               )}
 
-              {/* Action Buttons */}
               <div className="flex justify-end gap-3 pt-4 border-t">
                 <Button variant="outline" onClick={() => setShowEditModal(false)} disabled={editLoading}>Cancel</Button>
                 <Button onClick={async () => {
