@@ -287,126 +287,63 @@ const GroupDetail = () => {
     }
   }, [currentUserId]);
 
-  // // ✅ FIXED: Properly detects membership, handles public groups, avoids rejected state for public
-  // const checkJoinRequestStatus = async (groupId: number) => {
-  //   try {
-  //     const token = localStorage.getItem("auth_token");
-  //     if (!token || !currentUserId) return;
 
-  //     const groupResponse = await fetch(`${API_BASE}/groups/${groupId}`);
-  //     if (!groupResponse.ok) return;
-  //     const groupData: Group = await groupResponse.json();
-      
-  //     // ✅ If user is member → show joined state (handles approved status)
-  //     const isMemberCheck = groupData.groupMembers?.some(
-  //       (m: any) => m.userId === currentUserId && m.isActive
-  //     );
-  //     if (isMemberCheck) {
-  //       setJoinRequestStatus("none");
-  //       setHasPendingRequest(false);
-  //       return;
-  //     }
 
-  //     // ✅ Public groups: NO rejected state possible - just show join button
-  //     const isPrivate = groupData.isPrivate || groupData.settings?.isPrivate;
-  //     if (!isPrivate) {
-  //       setJoinRequestStatus("none");
-  //       setHasPendingRequest(false);
-  //       return;
-  //     }
 
-  //     // ✅ Private groups only: check pending requests
-  //     const pendingResponse = await fetch(`${API_BASE}/groups/${groupId}/join-requests/pending`, {
-  //       headers: { Authorization: `Bearer ${token}` }
-  //     });
-      
-  //     if (pendingResponse.ok) {
-  //       const pendingRequests: PendingRequest[] = await pendingResponse.json();
-  //       const hasPending = pendingRequests.some(req => req.user.id === currentUserId);
-        
-  //       if (hasPending) {
-  //         setJoinRequestStatus("pending");
-  //         setHasPendingRequest(true);
-  //         return;
-  //       }
-  //     }
 
-  //     // ✅ Private group, not member, not pending = assume rejected
-  //     setJoinRequestStatus("rejected");
-  //     setHasPendingRequest(false);
 
-  //   } catch (err) {
-  //     setJoinRequestStatus("none");
-  //     setHasPendingRequest(false);
-  //   }
-  // };
+
+
+
 const checkJoinRequestStatus = async (groupId: number) => {
   try {
     const token = localStorage.getItem("auth_token");
     if (!token || !currentUserId) return;
 
-    // ✅ Step 1: Fetch the dedicated status endpoint
-    // This tells us EXACTLY if pending, rejected, or none
-    const statusResponse = await fetch(`${API_BASE}/groups/${groupId}/join-status`, {
+    //  ONLY use the dedicated endpoint - NO fallbacks
+    const response = await fetch(`${API_BASE}/groups/${groupId}/join-status`, {
       headers: { Authorization: `Bearer ${token}` }
     });
 
-    if (statusResponse.ok) {
-      const data = await statusResponse.json();
-      const status = data.status; // "member", "pending", "rejected", or "none"
-
-      if (status === "member") {
-        setIsMember(true);
-        setJoinRequestStatus("none");
-        setHasPendingRequest(false);
-      } else if (status === "pending") {
-        setIsMember(false);
-        setJoinRequestStatus("pending");
-        setHasPendingRequest(true);
-      } else if (status === "rejected") {
-        setIsMember(false);
-        setJoinRequestStatus("rejected");
-        setHasPendingRequest(false);
-      } else {
-        // "none"
-        setIsMember(false);
-        setJoinRequestStatus("none");
-        setHasPendingRequest(false);
-      }
+    if (!response.ok) {
+      // If endpoint fails, log but DON'T change state
+      console.warn("Join-status endpoint failed, keeping current state");
       return;
     }
 
-    // ✅ Fallback if endpoint fails (older backend version)
-    // Default to "none" (Request to Join) instead of "rejected"
-    setJoinRequestStatus("none");
-    setHasPendingRequest(false);
+    const data = await response.json();
+    const status = data.status; // "member", "pending", "rejected", or "none"
 
+    //  Map backend status EXACTLY - no inference
+    switch (status) {
+      case "member":
+        setIsMember(true);
+        setJoinRequestStatus("none");
+        setHasPendingRequest(false);
+        break;
+      case "pending":
+        setIsMember(false);
+        setJoinRequestStatus("pending");  
+        setHasPendingRequest(true);
+        break;
+      case "rejected":
+        setIsMember(false);
+        setJoinRequestStatus("rejected");
+        setHasPendingRequest(false);
+        break;
+      case "none":
+      default:
+        setIsMember(false);
+        setJoinRequestStatus("none");
+        setHasPendingRequest(false);
+        break;
+    }
   } catch (err) {
+    
     console.error("Failed to check join status:", err);
-    // On error, default to safe state: Request to Join
-    setJoinRequestStatus("none");
-    setHasPendingRequest(false);
+    
   }
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -518,63 +455,84 @@ const checkJoinRequestStatus = async (groupId: number) => {
     }
   }, []);
 
-  // ✅ FIXED: Polling only for private groups, properly detects approved/rejected
-  useEffect(() => {
-    const isGroupPrivateSafe = group?.isPrivate || settings.isPrivate;
-    
-    if (!id || !isGroupPrivateSafe || isMember || isOrganizer || joinRequestStatus !== "pending") return;
-    
-    const pollInterval = setInterval(async () => {
-      try {
-        const token = localStorage.getItem("auth_token");
-        if (!token) return;
-        
-        // ✅ Check if user is now a member (approved case - fixes approved status showing rejected)
-        const groupResponse = await fetch(`${API_BASE}/groups/${id}`);
-        if (groupResponse.ok) {
-          const groupData: Group = await groupResponse.json();
-          const isNowMember = groupData.groupMembers?.some(
-            (m: any) => m.userId === currentUserId && m.isActive
-          );
-          
-          if (isNowMember) {
-            setJoinRequestStatus("none");
-            setHasPendingRequest(false);
-            setIsMember(true);
-            await fetchGroup(id);
-            toast.success("Welcome to the group!", {
-              description: "Your request was approved.",
-              icon: <CheckCircle className="h-4 w-4" />
-            });
-            return;
-          }
-        }
-        
-        // ✅ Check if request is still pending or was rejected
-        const pendingResponse = await fetch(`${API_BASE}/groups/${id}/join-requests/pending`, {
-          headers: { Authorization: `Bearer ${token}` }
+
+
+
+
+
+
+
+
+
+
+
+//  Poll for join request status changes - uses /join-status endpoint
+useEffect(() => {
+  
+  if (!id || isMember || isOrganizer || joinRequestStatus !== "pending") return;
+  
+  const pollInterval = setInterval(async () => {
+    try {
+      const token = localStorage.getItem("auth_token");
+      if (!token) return;
+      
+      
+      const response = await fetch(`${API_BASE}/groups/${id}/join-status`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      const newStatus = data.status;
+      
+      //  Only update if status actually changed
+      if (newStatus === "member" && joinRequestStatus !== "none") {
+        // Approved!
+        setJoinRequestStatus("none");
+        setHasPendingRequest(false);
+        setIsMember(true);
+        await fetchGroup(id); // Refresh group data
+        toast.success("Welcome to the group!", {
+          description: "Your request was approved.",
+          icon: <CheckCircle className="h-4 w-4" />
         });
-        
-        if (pendingResponse.ok) {
-          const pendingRequests: PendingRequest[] = await pendingResponse.json();
-          const stillPending = pendingRequests.some(req => req.user.id === currentUserId);
-          
-          if (!stillPending && joinRequestStatus === "pending") {
-            setJoinRequestStatus("rejected");
-            setHasPendingRequest(false);
-            toast.info("Join request was rejected", {
-              description: "You can re-apply if the group allows it.",
-              icon: <AlertCircle className="h-4 w-4" />
-            });
-          }
-        }
-      } catch (err) {
-        console.error("Polling error:", err);
+      } else if (newStatus === "rejected" && joinRequestStatus !== "rejected") {
+        // Rejected
+        setJoinRequestStatus("rejected");
+        setHasPendingRequest(false);
+        toast.info("Join request was rejected", {
+          description: "You can re-apply if the group allows it.",
+          icon: <AlertCircle className="h-4 w-4" />
+        });
       }
-    }, 15000);
-    
-    return () => clearInterval(pollInterval);
-  }, [id, group, settings.isPrivate, isMember, isOrganizer, joinRequestStatus, fetchGroup, currentUserId]);
+      
+    } catch (err) {
+      console.error("Polling error:", err);
+      
+    }
+  }, 15000); // Check every 15 seconds
+  
+  return () => clearInterval(pollInterval);
+}, [id, isMember, isOrganizer, joinRequestStatus, fetchGroup]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
   const scrollToSection = (sectionId: string) => {
@@ -582,7 +540,9 @@ const checkJoinRequestStatus = async (groupId: number) => {
     setMobileActiveTab("about");
   };
 
-  // ✅ FIXED: Handles all join scenarios, respects public/private, proper state updates
+
+
+  // FIXED: Handles all join scenarios, respects public/private, proper state updates
   const handleJoinGroup = async () => {
     if (!authToken) {
       navigate("/login", { state: { from: `/groups/${id}` } });
