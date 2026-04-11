@@ -20,6 +20,14 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import GroupChat from "@/components/GroupChat";
 
+
+
+// If using react-icons
+import { FaFacebookF, FaTwitter, FaWhatsapp } from "react-icons/fa";
+import { FiCopy } from "react-icons/fi";
+
+
+
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5260/api";
 
 interface Group {
@@ -1237,7 +1245,223 @@ useEffect(() => {
               </motion.div>
             )}
 
-            {/* Rules */}
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            {/* Group Chat */}
+            {isMember && (mobileActiveTab === "chat" || window.innerWidth >= 1024) && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.6 }}>
+                <Card className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center justify-between">
+                      <span className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /> Group Chat</span>
+                      {isOrganizer && <Badge variant="outline" className="text-xs">Admin Mode</Badge>}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {id && <GroupChat groupId={parseInt(id)} currentUserId={currentUserId} isOrganizer={isOrganizer} />}
+                  </CardContent>
+                </Card>
+              </motion.div> 
+            )}
+
+
+
+
+
+            {/* Upcoming Events */}
+            {group.groupEvents && group.groupEvents.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.7 }}>
+                <Card className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5 text-primary" /> Upcoming Events</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4 pt-0">
+                    {group.groupEvents.map((ge) => (
+                      <div
+                        key={ge.id}
+                        className="p-5 border rounded-xl hover:border-primary cursor-pointer transition-all flex justify-between items-center bg-card"
+                        onClick={() => navigate(`/events/${ge.event.id}`)}
+                      >
+                        <div>
+                          <h4 className="font-semibold">{ge.event.title}</h4>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {formatDate(ge.event.startTime)} • {ge.event.location || "Location TBD"}
+                          </p>
+                        </div>
+                        <Badge variant={ge.event.isFree ? "secondary" : "default"} className="text-xs">
+                          {ge.event.isFree ? "Free" : `KES ${ge.event.price}`}
+                        </Badge>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+          </div>
+
+          {/* Sidebar Column */}
+
+          {/* Sidebar Column
+          <div className="lg:mt-96 lg:sticky lg:top-32 lg:self-start lg:h-[calc(100vh-12rem)] lg:overflow-y-auto scrollbar-hide space-y-6 pr-2"> */}
+
+            <div className="lg:sticky lg:top-40 lg:self-start lg:h-[calc(100vh-10rem)] lg:overflow-y-auto scrollbar-hide space-y-6 pr-2 lg:pt-4">
+
+
+
+          {/* Organizer Card */}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3"><CardTitle>Organizer</CardTitle></CardHeader>
+              <CardContent className="pt-0">
+                <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                  <Avatar className="h-12 w-12 border-2 border-background shadow-sm">
+                    <AvatarFallback>{getInitials(group.organizer?.firstName || "", group.organizer?.lastName || "")}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-semibold">{group.organizer?.firstName} {group.organizer?.lastName}</p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Crown className="h-3 w-3 text-amber-500" /> Organizer</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Desktop Section Navigation */}
+            <Card className="hidden lg:block shadow-sm">
+              <CardHeader className="pb-3"><CardTitle className="text-base">Jump To</CardTitle></CardHeader>
+              <CardContent className="pt-0">
+                <nav className="space-y-1">
+                  {[
+                    { id: "section-about", label: "About", icon: Sparkles },
+                    { id: "section-rules", label: "Guidelines", icon: ListChecks },
+                    isMember && { id: "section-activity", label: "Activity", icon: Clock },
+                    isMember && { id: "section-discussions", label: "Discussions", icon: MessageSquare },
+                    isMember && { id: "section-gallery", label: "Gallery", icon: Camera },
+                  ].filter(Boolean).map((item: any) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => scrollToSection(item.id)}
+                        className="flex items-center w-full gap-2 px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground text-left"
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </nav>
+              </CardContent>
+            </Card>
+
+
+{isOrganizer && (
+  <>
+    {/* Members Card */}
+    <Card className="shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between">
+          <span>Members ({group.memberCount})</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0">
+        {membersLoading ? (
+          <div className="text-center py-4">
+            <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-2" />
+          </div>
+        ) : membersError ? (
+          <div className="text-center py-4 text-destructive text-sm">
+            <AlertCircle className="h-4 w-4 inline mr-1" />
+            {membersError}
+            {isOrganizer && (
+              <Button variant="link" size="sm" className="ml-2 p-0 h-auto" onClick={() => fetchMembers(parseInt(id!))}>
+                Retry
+              </Button>
+            )}
+          </div>
+        ) : members.length > 0 ? (
+          <div className="space-y-3">
+            {members.slice(0, 5).map((member) => (
+              <div key={member.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage 
+                    src={
+                      member.user.profilePicture && 
+                      !member.user.profilePicture.startsWith('blob:') && 
+                      (member.user.profilePicture.startsWith('http') || member.user.profilePicture.startsWith('data:'))
+                        ? member.user.profilePicture 
+                        : `https://ui-avatars.com/api/?name=${encodeURIComponent(member.user.firstName + ' ' + member.user.lastName)}&background=random&color=fff&size=128`
+                    }
+                    alt={`${member.user.firstName} ${member.user.lastName}`}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      if (!target.src.includes('ui-avatars.com')) {
+                        target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(member.user.firstName + ' ' + member.user.lastName)}&background=random&color=fff&size=128`;
+                      }
+                    }}
+                  />
+                  <AvatarFallback>{getInitials(member.user.firstName, member.user.lastName)}</AvatarFallback>
+                </Avatar>
+                <p className="text-sm truncate">{member.user.firstName} {member.user.lastName}</p>
+              </div>
+            ))}
+            {isOrganizer && members.length > 5 && (
+              <p className="text-xs text-muted-foreground text-center pt-2">+{members.length - 5} more</p>
+            )}
+            {isOrganizer && (
+              <Button variant="outline" className="w-full mt-4" onClick={() => { setShowMembersModal(true); fetchMembers(parseInt(id!)); }}>
+                Manage Members
+              </Button>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground text-center py-4">No members yet</p>
+        )}
+      </CardContent>
+    </Card>
+  </>
+)}
+
+
+            {/* Pending Requests */}
+            {isOrganizer && (
+              <Card className={pendingRequests.length > 0 ? "border-yellow-500/50 shadow-sm" : "shadow-sm"}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-yellow-700">
+                    <AlertCircle className="h-5 w-5" /> Pending Requests ({pendingRequests.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {pendingRequests.length > 0 ? (
+                    <Button variant="outline" className="w-full" onClick={() => { setShowRequestsModal(true); fetchPendingRequests(parseInt(id!)); }}>
+                      Review Request{pendingRequests.length !== 1 ? "s" : ""}
+                    </Button>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-2">No pending requests</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+
+
+
+
+
+{/* Rules */}
             {(mobileActiveTab === "rules" || window.innerWidth >= 1024) && (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
                 <Card id="section-rules" className="shadow-sm hover:shadow-md transition-shadow duration-200">
@@ -1366,209 +1590,74 @@ useEffect(() => {
               </motion.div>
             )}
 
-            {/* Group Chat */}
-            {isMember && (mobileActiveTab === "chat" || window.innerWidth >= 1024) && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.6 }}>
-                <Card className="shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center justify-between">
-                      <span className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /> Group Chat</span>
-                      {isOrganizer && <Badge variant="outline" className="text-xs">Admin Mode</Badge>}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    {id && <GroupChat groupId={parseInt(id)} currentUserId={currentUserId} isOrganizer={isOrganizer} />}
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )}
 
-            {/* Upcoming Events */}
-            {group.groupEvents && group.groupEvents.length > 0 && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.7 }}>
-                <Card className="shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5 text-primary" /> Upcoming Events</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4 pt-0">
-                    {group.groupEvents.map((ge) => (
-                      <div
-                        key={ge.id}
-                        className="p-5 border rounded-xl hover:border-primary cursor-pointer transition-all flex justify-between items-center bg-card"
-                        onClick={() => navigate(`/events/${ge.event.id}`)}
-                      >
-                        <div>
-                          <h4 className="font-semibold">{ge.event.title}</h4>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {formatDate(ge.event.startTime)} • {ge.event.location || "Location TBD"}
-                          </p>
-                        </div>
-                        <Badge variant={ge.event.isFree ? "secondary" : "default"} className="text-xs">
-                          {ge.event.isFree ? "Free" : `KES ${ge.event.price}`}
-                        </Badge>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )}
-          </div>
-
-          {/* Sidebar Column */}
-          <div className="lg:sticky lg:top-24 lg:self-start space-y-6">
-            {/* Desktop Section Navigation */}
-            <Card className="hidden lg:block shadow-sm">
-              <CardHeader className="pb-3"><CardTitle className="text-base">Jump To</CardTitle></CardHeader>
-              <CardContent className="pt-0">
-                <nav className="space-y-1">
-                  {[
-                    { id: "section-about", label: "About", icon: Sparkles },
-                    { id: "section-rules", label: "Guidelines", icon: ListChecks },
-                    isMember && { id: "section-activity", label: "Activity", icon: Clock },
-                    isMember && { id: "section-discussions", label: "Discussions", icon: MessageSquare },
-                    isMember && { id: "section-gallery", label: "Gallery", icon: Camera },
-                  ].filter(Boolean).map((item: any) => {
-                    const Icon = item.icon;
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => scrollToSection(item.id)}
-                        className="flex items-center w-full gap-2 px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground text-left"
-                      >
-                        <Icon className="h-4 w-4" />
-                        {item.label}
-                      </button>
-                    );
-                  })}
-                </nav>
-              </CardContent>
-            </Card>
-
-            {/* Organizer Card */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3"><CardTitle>Organizer</CardTitle></CardHeader>
-              <CardContent className="pt-0">
-                <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                  <Avatar className="h-12 w-12 border-2 border-background shadow-sm">
-                    <AvatarFallback>{getInitials(group.organizer?.firstName || "", group.organizer?.lastName || "")}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-semibold">{group.organizer?.firstName} {group.organizer?.lastName}</p>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Crown className="h-3 w-3 text-amber-500" /> Organizer</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Members Card */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center justify-between">
-                  <span>Members ({group.memberCount})</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                {isMember || isOrganizer ? (
-                  <>
-                    {membersLoading ? (
-                      <div className="text-center py-4">
-                        <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-2" />
-                      </div>
-                    ) : membersError ? (
-                      <div className="text-center py-4 text-destructive text-sm">
-                        <AlertCircle className="h-4 w-4 inline mr-1" />
-                        {membersError}
-                        {isOrganizer && (
-                          <Button variant="link" size="sm" className="ml-2 p-0 h-auto" onClick={() => fetchMembers(parseInt(id!))}>
-                            Retry
-                          </Button>
-                        )}
-                      </div>
-                    ) : members.length > 0 ? (
-                      <div className="space-y-3">
-                        {members.slice(0, 5).map((member) => (
-                          <div key={member.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage 
-                                src={
-                                  member.user.profilePicture && 
-                                  !member.user.profilePicture.startsWith('blob:') && 
-                                  (member.user.profilePicture.startsWith('http') || member.user.profilePicture.startsWith('data:'))
-                                    ? member.user.profilePicture 
-                                    : `https://ui-avatars.com/api/?name=${encodeURIComponent(member.user.firstName + ' ' + member.user.lastName)}&background=random&color=fff&size=128`
-                                }
-                                alt={`${member.user.firstName} ${member.user.lastName}`}
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  if (!target.src.includes('ui-avatars.com')) {
-                                    target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(member.user.firstName + ' ' + member.user.lastName)}&background=random&color=fff&size=128`;
-                                  }
-                                }}
-                              />
-                              <AvatarFallback>{getInitials(member.user.firstName, member.user.lastName)}</AvatarFallback>
-                            </Avatar>
-                            <p className="text-sm truncate">{member.user.firstName} {member.user.lastName}</p>
-                          </div>
-                        ))}
-                        {isOrganizer && members.length > 5 && (
-                          <p className="text-xs text-muted-foreground text-center pt-2">+{members.length - 5} more</p>
-                        )}
-                        {isOrganizer && (
-                          <Button variant="outline" className="w-full mt-4" onClick={() => { setShowMembersModal(true); fetchMembers(parseInt(id!)); }}>
-                            Manage Members
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground text-center py-4">No members yet</p>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center py-4">
-                    <Users className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">Join to see members</p>
-                    <Button variant="outline" size="sm" className="mt-3" onClick={handleJoinGroup}>
-                      {isGroupPrivate ? "Request to Join" : "Join Group"}
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Pending Requests */}
-            {isOrganizer && (
-              <Card className={pendingRequests.length > 0 ? "border-yellow-500/50 shadow-sm" : "shadow-sm"}>
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-yellow-700">
-                    <AlertCircle className="h-5 w-5" /> Pending Requests ({pendingRequests.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  {pendingRequests.length > 0 ? (
-                    <Button variant="outline" className="w-full" onClick={() => { setShowRequestsModal(true); fetchPendingRequests(parseInt(id!)); }}>
-                      Review Request{pendingRequests.length !== 1 ? "s" : ""}
-                    </Button>
-                  ) : (
-                    <p className="text-sm text-muted-foreground text-center py-2">No pending requests</p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Share Card */}
+           
+           
+           
+                          {/* Share Card */}
             <Card className="shadow-sm">
               <CardHeader className="pb-3"><CardTitle>Share Group</CardTitle></CardHeader>
               <CardContent className="pt-0">
                 <div className="flex gap-3">
-                  {["facebook", "twitter", "whatsapp", "copy"].map((p) => (
-                    <Button key={p} variant="outline" size="icon" onClick={() => handleShare(p)} className="h-10 w-10 hover:scale-105 transition-transform">
-                      <Share2 className="h-4 w-4" />
-                    </Button>
-                  ))}
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={() => handleShare("facebook")} 
+                    className="h-10 w-10 hover:scale-105 transition-transform hover:bg-blue-50 hover:border-blue-300"
+                    aria-label="Share on Facebook"
+                  >
+                    <FaFacebookF className="h-4 w-4 text-[#1877F2]" />
+                  </Button>
+
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={() => handleShare("twitter")} 
+                    className="h-10 w-10 hover:scale-105 transition-transform hover:bg-black hover:border-gray-800"
+                    aria-label="Share on X"
+                  >
+                    <FaTwitter className="h-4 w-4 text-black" />
+                  </Button>
+
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={() => handleShare("whatsapp")} 
+                    className="h-10 w-10 hover:scale-105 transition-transform hover:bg-green-50 hover:border-green-300"
+                    aria-label="Share on WhatsApp"
+                  >
+                    <FaWhatsapp className="h-5 w-5 text-[#25D366]" />
+                  </Button>
+
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={() => handleShare("copy")} 
+                    className="h-10 w-10 hover:scale-105 transition-transform hover:bg-gray-50"
+                    aria-label="Copy link"
+                  >
+                    <FiCopy className="h-4 w-4 text-gray-600" />
+                  </Button>
                 </div>
                 {showCopiedToast && <p className="text-green-600 text-xs mt-3 text-center">Link copied!</p>}
               </CardContent>
             </Card>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
           </div>
         </div>
       </div>
