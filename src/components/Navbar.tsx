@@ -173,14 +173,23 @@ const Navbar = () => {
                           My Events
                         </Link>
 
-                        <Link 
+                        {/* <Link 
                           to="/groups" 
                           className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg"
                           onClick={() => { setUserDropdownOpen(false); setMobileOpen(false); }}
                         >
                           <Users className="h-4 w-4" />
                           Groups
-                        </Link>
+                        </Link> */}
+
+                        <Link 
+  to="/my-groups" 
+  className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg"
+  onClick={() => { setUserDropdownOpen(false); setMobileOpen(false); }}
+>
+  <Users className="h-4 w-4" />
+  My Groups
+</Link>
 
                         <Link 
                           to="/profile" 
