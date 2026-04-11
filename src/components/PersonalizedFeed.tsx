@@ -23,12 +23,40 @@ const PersonalizedFeed = () => {
   const fetchEvents = async (isLoadMore = false) => {
     const token = localStorage.getItem("auth_token");
     
-    // If not logged in, redirect to login or show fallback
+    // ✅ GUEST USERS: Fetch PUBLIC trending events instead of redirecting
     if (!token) {
-      navigate("/login", { state: { from: "/profile" } });
-      return;
+      try {
+        if (!isLoadMore) setLoading(true);
+        else setLoadingMore(true);
+        setError(null);
+
+        const params = new URLSearchParams();
+        params.append("limit", (filters.limit || 12).toString());
+        params.append("offset", (filters.offset || 0).toString());
+        params.append("sortBy", filters.sortBy || "trending");
+        if (filters.city) params.append("city", filters.city);
+        if (filters.country) params.append("country", filters.country);
+
+        const response = await fetch(`${API_BASE}/events/trending?${params}`);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch public events: ${response.status}`);
+        }
+
+        const data: PagedResult<Event> = await response.json();
+        setEvents(data.items);
+        setPagination({ hasMore: data.hasMore });
+      } catch (err) {
+        console.error("Failed to fetch public events:", err);
+        setError("Could not load events. Please try again.");
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+      return; // Exit early - guest sees public feed
     }
 
+    // ✅ AUTHENTICATED USER: Fetch personalized events (original logic preserved)
     const params = new URLSearchParams();
     if (filters.limit) params.append("limit", filters.limit.toString());
     if (filters.offset) params.append("offset", filters.offset.toString());
@@ -55,8 +83,11 @@ const PersonalizedFeed = () => {
       );
 
       if (response.status === 401) {
+        // ✅ Token expired: clear storage, gracefully fall back to public feed (NO redirect)
         localStorage.removeItem("auth_token");
-        navigate("/login");
+        localStorage.removeItem("refresh_token");
+        // Recursively call fetchEvents to load public feed for guest state
+        fetchEvents(isLoadMore);
         return;
       }
 
@@ -138,9 +169,13 @@ const PersonalizedFeed = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="font-display text-2xl font-bold text-foreground">For You</h2>
+            <h2 className="font-display text-2xl font-bold text-foreground">
+              {!localStorage.getItem("auth_token") ? "Trending Events" : "For You"}
+            </h2>
             <p className="text-muted-foreground text-sm">
-              Events matched to your interests and location
+              {!localStorage.getItem("auth_token") 
+                ? "Popular events near you" 
+                : "Events matched to your interests and location"}
             </p>
           </div>
           <Button 
@@ -164,7 +199,7 @@ const PersonalizedFeed = () => {
               ))}
             </div>
 
-            {/* Load More */}
+            {/* Load More - preserved original functionality */}
             {pagination.hasMore && (
               <div className="flex justify-center mt-8">
                 <Button 
@@ -183,22 +218,39 @@ const PersonalizedFeed = () => {
             )}
           </>
         ) : (
-          /* Empty State */
+          /* Empty State - Context Aware (preserves all original buttons + adds guest CTA) */
           <div className="text-center py-12 border border-dashed rounded-xl">
             <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
               <AlertCircle className="h-8 w-8 text-muted-foreground" />
             </div>
-            <h3 className="font-medium text-foreground mb-1">No events found</h3>
+            <h3 className="font-medium text-foreground mb-1">
+              {!localStorage.getItem("auth_token") ? "Explore trending events" : "No events found"}
+            </h3>
             <p className="text-muted-foreground text-sm mb-4 max-w-md mx-auto">
-              We couldn't find events matching your interests. Try updating your interests or explore trending events below.
+              {!localStorage.getItem("auth_token") 
+                ? "Sign in to get personalized event recommendations based on your interests and location." 
+                : "We couldn't find events matching your interests. Try updating your interests or explore trending events below."}
             </p>
             <div className="flex gap-2 justify-center">
-              <Button variant="outline" size="sm" onClick={() => navigate("/interests")}>
-                Update Interests
-              </Button>
-              <Button size="sm" onClick={() => navigate("/#trending")}>
-                View Trending
-              </Button>
+              {!localStorage.getItem("auth_token") ? (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => navigate("/events")}>
+                    Browse All Events
+                  </Button>
+                  <Button size="sm" onClick={() => navigate("/login")}>
+                    Sign In to Personalize
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => navigate("/interests")}>
+                    Update Interests
+                  </Button>
+                  <Button size="sm" onClick={() => navigate("/#trending")}>
+                    View Trending
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         )}
