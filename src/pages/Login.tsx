@@ -91,7 +91,7 @@ const Login = () => {
     resetForm();
   };
 
-  // ✅ Helper: Check interests and redirect AFTER sign in
+  // ✅Helper: Check interests and redirect AFTER sign in
   const checkAndRedirect = async (token: string) => {
     try {
       const response = await fetch(`${API_BASE}/interest/has-interests`, {
@@ -109,7 +109,7 @@ const Login = () => {
     }
   };
 
-  // ==================== API CALLS ====================
+  //  API CALLS 
 
   const handleSignup = async () => {
     setIsLoading(true);
@@ -200,8 +200,8 @@ const Login = () => {
     setError(null);
 
     try {
-      // ✅ For Phone: User must enter email + phone (to verify they match)
-      // ✅ For Email: User only enters email
+      //  For Phone: User must enter email + phone (to verify they match)
+      //  For Email: User only enters email
       if (formData.otpDeliveryMethod === "Phone") {
         if (!formData.email || !formData.phone) {
           throw new Error("Please enter both email and phone number");
@@ -390,7 +390,7 @@ const Login = () => {
     }
   };
 
-  // ==================== RENDER ====================
+  // RENDER 
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 py-8">
@@ -421,7 +421,18 @@ const Login = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* ====================== SIGN UP ====================== */}
+
+
+
+
+
+
+
+
+
+
+
+            {/* SIGN UP  */}
             {authMode === "signup" && (
               <>
                 <div className="grid grid-cols-2 gap-4">
@@ -467,8 +478,8 @@ const Login = () => {
                   )}
                   <p className="text-xs text-muted-foreground mt-1.5">
                     {formData.otpDeliveryMethod === "Phone" 
-                      ? "📱 OTP code will be sent to this phone number" 
-                      : "📧 OTP code will be sent to this email address"}
+                      ? " OTP code will be sent to this phone number" 
+                      : " OTP code will be sent to this email address"}
                   </p>
                 </div>
 
@@ -511,7 +522,19 @@ const Login = () => {
               </>
             )}
 
-            {/* ====================== SIGN IN (Password) ====================== */}
+
+
+
+
+
+
+
+
+
+
+
+
+            {/*  SIGN IN (Password)  */}
             {authMode === "login" && (
               <>
                 <div>
@@ -567,7 +590,17 @@ const Login = () => {
               </>
             )}
 
-            {/* ====================== SIGN IN WITH CODE ====================== */}
+
+
+
+
+
+
+
+
+
+
+            {/*  SIGN IN WITH CODE */}
             {authMode === "otp-login" && (
               <>
                 <div>
@@ -591,7 +624,7 @@ const Login = () => {
                   </div>
                 </div>
 
-                {/* ✅ Email Field (Always Required for Account Lookup) */}
+                {/* Email Field (Always Required for Account Lookup) */}
                 <div>
                   <Label htmlFor="email">Email Address</Label>
                   <Input
@@ -604,7 +637,7 @@ const Login = () => {
                   />
                 </div>
 
-                {/* ✅ Phone Field (Only if Phone selected) */}
+                {/*  Phone Field (Only if Phone selected) */}
                 {formData.otpDeliveryMethod === "Phone" && (
                   <div>
                     <Label htmlFor="phone">Phone Number</Label>
@@ -617,15 +650,15 @@ const Login = () => {
                       required
                     />
                     <p className="text-xs text-muted-foreground mt-1.5">
-                      ⚠️ This phone number must be linked to your email
+                       This phone number must be linked to your email
                     </p>
                   </div>
                 )}
 
                 <p className="text-xs text-muted-foreground">
                   {formData.otpDeliveryMethod === "Phone" 
-                    ? "📱 OTP code will be sent to this phone number" 
-                    : "📧 OTP code will be sent to this email address"}
+                    ? " OTP code will be sent to this phone number" 
+                    : " OTP code will be sent to this email address"}
                 </p>
 
                 <Button type="submit" className="w-full h-12 text-base font-semibold" disabled={isLoading}>
@@ -634,7 +667,15 @@ const Login = () => {
               </>
             )}
 
-            {/* ====================== FORGOT PASSWORD ====================== */}
+
+
+
+
+
+
+
+
+            {/*  FORGOT PASSWORD  */}
             {authMode === "forgot-password" && (
               <>
                 <div>
@@ -649,7 +690,18 @@ const Login = () => {
               </>
             )}
 
-            {/* ====================== VERIFY OTP ====================== */}
+
+
+
+
+
+
+
+
+
+
+
+            {/*  VERIFY OTP */}
             {authMode === "verify-otp" && (
               <>
                 <div className="text-center mb-2">
@@ -714,7 +766,7 @@ const Login = () => {
                   </div>
                 )}
 
-                {/* Dev OTP Mock (Keep for testing) */}
+                {/* Dev OTP Mock (Kept for testing) */}
                 {!otpIdentifier.includes("@") && otpPurpose !== "PasswordReset" && (
                   <div className="text-center text-xs text-amber-600 bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4">
                     <Button type="button" variant="outline" size="sm" className="mt-3" onClick={handleDevShowOtp}>

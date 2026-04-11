@@ -56,7 +56,7 @@ const ProfileNudge = () => {
   };
 
   return (
-    // ✅ Fixed bottom-right, responsive for mobile
+   
     <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 max-w-sm w-[calc(100vw-2rem)] sm:w-96 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div 
         className="group relative overflow-hidden rounded-2xl border border-primary/20 bg-background/90 backdrop-blur-xl 

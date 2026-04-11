@@ -7,7 +7,7 @@ import { ThemeProvider } from "@/hooks/use-theme";
 import { AuthProvider } from "@/context/AuthContext";
 import Navbar from "@/components/Navbar";
 
-// ==================== PUBLIC PAGES ====================
+//  PUBLIC PAGES 
 import Index from "./pages/Index.tsx";
 import Groups from "./pages/Groups.tsx";
 import CreateGroup from "./pages/CreateGroup.tsx";
@@ -23,20 +23,20 @@ import MyEvents from "./pages/MyEvents.tsx";
 import Events from "./pages/Events.tsx";
 import EventDetail from "./pages/EventDetail.tsx";
 
-// ==================== ADMIN PAGES ====================
+//  ADMIN PAGES 
 import AdminLogin from "./pages/AdminLogin.tsx";
 import AdminDashboard from "./pages/AdminDashboard.tsx";
 
-// ==================== UTILITY PAGES ====================
+//  UTILITY PAGES 
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
-// ==================== APP CONTENT WITH CONDITIONAL NAVBAR ====================
+//  APP CONTENT WITH CONDITIONAL NAVBAR 
 const AppContent = () => {
   const location = useLocation();
   
-  // Routes where Navbar should NOT show
+ 
   const noNavbarRoutes = ["/login", "/admin-login", "/admin"];
   const shouldShowNavbar = !noNavbarRoutes.includes(location.pathname);
 
@@ -45,40 +45,40 @@ const AppContent = () => {
       {/* Conditionally render Navbar */}
       {shouldShowNavbar && <Navbar />}
       
-      {/* Page content with conditional padding for fixed navbar */}
+    
       <div className={shouldShowNavbar ? "pt-16" : ""}>
         <Routes>
-          {/* ==================== HOME & MAIN FEEDS ==================== */}
+          {/*  HOME & MAIN FEEDS  */}
           <Route path="/" element={<Index />} />
           
-          {/* ==================== EVENTS ==================== */}
+          {/*  EVENTS  */}
           <Route path="/events" element={<Events />} />
           <Route path="/events/:id" element={<EventDetail />} />
           <Route path="/create-event" element={<CreateEvent />} />
           <Route path="/my-events" element={<MyEvents />} />
           
-          {/* ==================== GROUPS ==================== */}
+          {/*  GROUPS  */}
           <Route path="/groups" element={<Groups />} />
           <Route path="/create-group" element={<CreateGroup />} />
           <Route path="/groups/:id" element={<GroupDetail />} />
           <Route path="/groups/:id/settings" element={<GroupSettings />} />
           
-          {/* ==================== MAP & LOCATION ==================== */}
+          {/*  MAP & LOCATION  */}
           <Route path="/map" element={<MapView />} />
           
-          {/* ==================== INTERESTS ==================== */}
+          {/*  INTERESTS */}
           <Route path="/interests" element={<Interests />} />
           <Route path="/manage-interests" element={<ManageInterests />} />
           
-          {/* ==================== USER PROFILE & AUTH ==================== */}
+          {/* USER PROFILE & AUTH  */}
           <Route path="/profile" element={<Profile />} />
           <Route path="/login" element={<Login />} />
           
-          {/* ==================== ADMIN ROUTES ==================== */}
+          {/*  ADMIN ROUTES */}
           <Route path="/admin-login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminDashboard />} />
           
-          {/* ==================== 404 - MUST BE LAST ==================== */}
+          {/*  404 -*/}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
@@ -86,7 +86,7 @@ const AppContent = () => {
   );
 };
 
-// ==================== MAIN APP COMPONENT ====================
+//  MAIN APP COMPONENT 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>

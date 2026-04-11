@@ -89,7 +89,7 @@ const Interests = () => {
 
   const handleSkip = () => {
     if (window.confirm("Skip interest selection? You can update this later in your profile.")) {
-      // Note: User skipped, so next login will still redirect to interests
+      
       navigate("/");
     }
   };

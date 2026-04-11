@@ -49,7 +49,7 @@ const Navbar = () => {
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-2">
           <span className="text-gradient font-display text-xl font-bold tracking-tight">
-            Eventora/ LinkUp254
+            LinkUp254
           </span>
         </Link>
 
@@ -111,7 +111,7 @@ const Navbar = () => {
                         Create Event
                       </Link>
                       
-                      {/* ✅ Manage Interests Link */}
+                      {/*  Manage Interests Link */}
                       <Link 
                         to="/manage-interests" 
                         className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg"
@@ -219,7 +219,7 @@ const Navbar = () => {
                 Create Event
               </Link>
               
-              {/* ✅ Mobile: Manage Interests Link */}
+              {/* Mobile: Manage Interests Link */}
               <Link 
                 to="/interests" 
                 onClick={() => { setMobileOpen(false); setUserDropdownOpen(false); }}

@@ -1233,19 +1233,19 @@ const checkJoinRequestStatus = async (groupId: number) => {
           Processing...
         </>
       ) : joinRequestStatus === "pending" ? (
-        // ✅ Pending state (private groups only)
+        //  Pending state (private groups only)
         <>
           <Clock className="mr-2 h-4 w-4 text-yellow-600" /> 
           Request Sent
         </>
       ) : joinRequestStatus === "rejected" ? (
-        // ✅ Rejected state (private groups only)
+        // Rejected state (private groups only)
         <>
           <AlertCircle className="mr-2 h-4 w-4 text-destructive" /> 
           Request Rejected • Re-apply
         </>
       ) : (
-        // ✅ Default state: Join or Request to Join
+        // Default state: Join or Request to Join
         <>
           <UserPlus className="mr-2 h-4 w-4" /> 
           {isGroupPrivate ? "Request to Join" : "Join Group"}

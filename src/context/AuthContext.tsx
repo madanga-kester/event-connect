@@ -20,11 +20,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ FIX: Load auth state from localStorage on mount
-  // Use "user" key to match Login.tsx and Navbar.tsx (not "auth_user")
+
   useEffect(() => {
     const storedToken = localStorage.getItem("auth_token");
-    const storedUser = localStorage.getItem("user");  // ✅ Changed from "auth_user" to "user"
+    const storedUser = localStorage.getItem("user");  
     
     if (storedToken && storedUser) {
       try {
@@ -50,9 +49,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const data: AuthResponse = await response.json();
       
       if (data.isSuccess && data.token && data.user) {
-        // ✅ FIX: Save with "user" key to match Navbar.tsx
+        
         localStorage.setItem("auth_token", data.token);
-        localStorage.setItem("user", JSON.stringify(data.user));  // ✅ Changed from "auth_user" to "user"
+        localStorage.setItem("user", JSON.stringify(data.user));  
         setToken(data.token);
         setUser(data.user);
       }
@@ -65,9 +64,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
-    // ✅ FIX: Remove "user" key to match Login.tsx
+    
     localStorage.removeItem("auth_token");
-    localStorage.removeItem("user");  // ✅ Changed from "auth_user" to "user"
+    localStorage.removeItem("user"); 
     setToken(null);
     setUser(null);
   };
@@ -76,7 +75,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (user) {
       const updated = { ...user, ...updates };
       setUser(updated);
-      localStorage.setItem("user", JSON.stringify(updated));  // ✅ Changed from "auth_user" to "user"
+      localStorage.setItem("user", JSON.stringify(updated));  
     }
   };
 

@@ -117,17 +117,17 @@ const Profile = () => {
         const data = await response.json();
         setProfileCompleteness(data);
       } else {
-        // ✅ FALLBACK: Calculate completeness locally if endpoint fails
+        //  FALLBACK: Calculate completeness locally if endpoint fails
         calculateCompletenessLocally();
       }
     } catch (err) {
       console.error("Failed to fetch completeness:", err);
-      // ✅ FALLBACK: Calculate locally on error
+      //  FALLBACK: Calculate locally on error
       calculateCompletenessLocally();
     }
   };
 
-  // ✅ FALLBACK: Calculate profile completeness locally
+  //  FALLBACK: Calculate profile completeness locally
   const calculateCompletenessLocally = () => {
     const fields = [
       profile.firstName,
@@ -291,7 +291,7 @@ const Profile = () => {
 
   return (
     <>
-      {/* ✅ CREATIVE HEADER BANNER (Replaces duplicate avatar) */}
+      {/*   HEADER BANNER  */}
       <div className="relative h-48 md:h-64 bg-gradient-to-r from-primary/20 via-purple-500/20 to-pink-500/20 overflow-hidden">
         {/* Animated background particles */}
         <div className="absolute inset-0 opacity-40">
@@ -351,7 +351,7 @@ const Profile = () => {
             <Card className="sticky top-24 border-border bg-card">
               <CardContent className="pt-8 pb-6">
                 <div className="flex flex-col items-center text-center">
-                  {/* Avatar - Now the main one */}
+                  {/* Avatar -  main one */}
                   <div className="relative mb-6">
                     <Avatar className="w-32 h-32 ring-4 ring-background shadow-xl border-4 border-primary/20">
                       <AvatarImage src={profile.profilePicture} className="object-cover" />
@@ -382,7 +382,7 @@ const Profile = () => {
                     {profile.email}
                   </p>
 
-                  {/* ✅ Profile Strength - Now properly calculated */}
+                  {/*  Profile Strength -  calculated */}
                   <div className="w-full mb-6">
                     <div className="flex justify-between text-xs font-medium mb-2">
                       <span className="text-foreground">Profile Strength</span>

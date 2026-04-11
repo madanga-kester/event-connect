@@ -197,7 +197,7 @@ const AdminLogin = () => {
             </div>
           </div>
         </div>
-        <div className="mt-6 text-center text-xs text-muted-foreground"><p>🔐 Admin access is restricted and logged.</p><p>Use only authorized credentials.</p></div>
+        <div className="mt-6 text-center text-xs text-muted-foreground"><p> Admin access is restricted and logged.</p><p>Use only authorized credentials.</p></div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-// ==================== API RESPONSE TYPES ====================
+//API RESPONSE TYPES 
 
 export interface PagedResult<T> {
   items: T[];
@@ -8,7 +8,7 @@ export interface PagedResult<T> {
   hasMore: boolean;
 }
 
-// ==================== EVENT TYPES ====================
+// EVENT TYPES 
 
 export interface Interest {
   id: number;
@@ -57,7 +57,7 @@ export interface Event {
   updatedAt: string;
 }
 
-// ==================== USER TYPES ====================
+//  USER TYPES 
 
 export interface UserProfile {
   id: number;
@@ -81,7 +81,7 @@ export interface ProfileCompleteness {
   missingFields: string[];
 }
 
-// ==================== AUTH TYPES ====================
+//  AUTH TYPES 
 
 export interface AuthResponse {
   isSuccess: boolean;
@@ -94,7 +94,7 @@ export interface SelectInterestsDto {
   interestIds: number[];
 }
 
-// ==================== EVENT FILTER TYPES ====================
+// EVENT FILTER TYPES 
 
 export interface EventFilters {
   city?: string;
