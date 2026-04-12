@@ -20,7 +20,13 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import GroupChat from "@/components/GroupChat";
 
-
+// ✅ TypeScript declarations for window extensions used by GroupChat
+declare global {
+  interface Window {
+    promoteMessageToDiscussion?: (messageId: number, content: string) => Promise<void>;
+    prefillDiscussionForm?: (data: { prefillTitle: string; prefillContent: string }) => void;
+  }
+}
 
 // If using react-icons
 import { FaFacebookF, FaTwitter, FaWhatsapp } from "react-icons/fa";
@@ -216,9 +222,18 @@ const GroupDetail = () => {
   const [showGalleryPopup, setShowGalleryPopup] = useState(false);
   const [selectedGalleryImage, setSelectedGalleryImage] = useState<string>("");
 
+
+
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
   const [discussions, setDiscussions] = useState<DiscussionItem[]>([]);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
+  
+  // ✅ Discussion creation states (MUST be inside component)
+  const [showCreateDiscussionModal, setShowCreateDiscussionModal] = useState(false);
+  const [newDiscussion, setNewDiscussion] = useState({ title: "", content: "" });
+  const [creatingDiscussion, setCreatingDiscussion] = useState(false);
+
+
 
   const userData = localStorage.getItem("user");
   const currentUserId = userData ? JSON.parse(userData).id : null;
@@ -457,13 +472,89 @@ const checkJoinRequestStatus = async (groupId: number) => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  useEffect(() => {
+  // useEffect(() => {
+  //   if (pageRef.current) {
+  //     pageRef.current.scrollIntoView({ behavior: "auto" });
+  //   }
+  // }, []);
+
+    useEffect(() => {
     if (pageRef.current) {
       pageRef.current.scrollIntoView({ behavior: "auto" });
     }
   }, []);
 
+  // ✅ Listen for chat → discussion switch events from GroupChat
+  useEffect(() => {
+    const handleSwitchToDiscussions = (e: Event) => {
+      const customEvent = e as CustomEvent<{ prefillTitle: string; prefillContent: string }>;
+      setMobileActiveTab("discussions");
+      if (window.prefillDiscussionForm) {
+        window.prefillDiscussionForm(customEvent.detail);
+      }
+    };
+    window.addEventListener("switchToDiscussions", handleSwitchToDiscussions as EventListener);
+    return () => window.removeEventListener("switchToDiscussions", handleSwitchToDiscussions as EventListener);
+  }, []);
 
+  // ✅ Expose promote function to GroupChat for organizers
+  useEffect(() => {
+    window.promoteMessageToDiscussion = async (messageId: number, content: string) => {
+      if (!authToken || !id) return;
+      try {
+        const response = await fetch(`${API_BASE}/groups/${id}/discussions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            title: content.slice(0, 80) + (content.length > 80 ? "..." : ""),
+            content: content,
+            sourceMessageId: messageId,
+            isPinned: false
+          })
+        });
+        if (response.ok) {
+          toast.success("Promoted to Discussion", {
+            description: "Members can now find this in the Discussions tab.",
+            action: {
+              label: "View Post",
+              onClick: () => setMobileActiveTab("discussions")
+            }
+          });
+          fetchDiscussions(parseInt(id!));
+        }
+      } catch (err) {
+        toast.error("Failed to promote message");
+      }
+    };
+    return () => { delete window.promoteMessageToDiscussion; };
+  }, [authToken, id]);
+
+  // ✅ Expose pre-fill function for discussion form
+  // useEffect(() => {
+  //   window.prefillDiscussionForm = ({ prefillTitle, prefillContent }: { prefillTitle: string; prefillContent: string }) => {
+  //     toast.info("Form pre-filled", {
+  //       description: "Scroll down to review and post your Discussion."
+  //     });
+  //     // If you have discussion form state, set it here:
+  //     // setNewDiscussion({ title: prefillTitle, content: prefillContent });
+  //   };
+  //   return () => { delete window.prefillDiscussionForm; };
+  // }, []);
+
+  // ✅ Expose pre-fill function for discussion form
+  useEffect(() => {
+    window.prefillDiscussionForm = ({ prefillTitle, prefillContent }: { prefillTitle: string; prefillContent: string }) => {
+      setNewDiscussion({ title: prefillTitle, content: prefillContent });
+      setShowCreateDiscussionModal(true);
+      toast.info("Discussion form pre-filled", {
+        description: "Review your content and click Post when ready."
+      });
+    };
+    return () => { delete window.prefillDiscussionForm; };
+  }, []);
 
 
 
@@ -752,7 +843,29 @@ useEffect(() => {
     }
   };
 
-  const handleAddRule = async () => {
+  // const handleAddRule = async () => {
+  //   if (!newRule.title.trim() || !id) return;
+  //   try {
+  //     if (!authToken) return;
+  //     const response = await fetch(`${API_BASE}/groups/${id}/rules`, {
+  //       method: "POST",
+  //       headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+  //       body: JSON.stringify(newRule)
+  //     });
+  //     const result = await response.json();
+  //     if (result.isSuccess) {
+  //       setNewRule({ title: "", description: "" });
+  //       toast.success("Rule added.");
+  //       fetchRules(parseInt(id));
+  //     } else {
+  //       toast.error(result.message || "Failed to add rule");
+  //     }
+  //   } catch (err) {
+  //     toast.error("Network error.");
+  //   }
+  // };
+
+    const handleAddRule = async () => {
     if (!newRule.title.trim() || !id) return;
     try {
       if (!authToken) return;
@@ -773,6 +886,48 @@ useEffect(() => {
       toast.error("Network error.");
     }
   };
+
+  const handleCreateDiscussion = async () => {
+    if (!newDiscussion.title.trim() || !id) return;
+    try {
+      setCreatingDiscussion(true);
+      if (!authToken) return;
+      
+      const response = await fetch(`${API_BASE}/groups/${id}/discussions`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json", 
+          "Authorization": `Bearer ${authToken}` 
+        },
+        body: JSON.stringify({
+          title: newDiscussion.title.trim(),
+          content: newDiscussion.content.trim(),
+          isPinned: false
+        })
+      });
+      
+      const result = await response.json();
+      if (result.isSuccess) {
+        toast.success("Discussion created!");
+        setNewDiscussion({ title: "", content: "" });
+        setShowCreateDiscussionModal(false);
+        fetchDiscussions(parseInt(id));
+      } else {
+        toast.error(result.message || "Failed to create discussion");
+      }
+    } catch (err) {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setCreatingDiscussion(false);
+    }
+  };
+
+
+
+
+
+
+  
 
   const handleUpdateMemberRole = async (memberId: number, newRole: string) => {
     if (!id) return;
@@ -1223,10 +1378,6 @@ useEffect(() => {
   )}
 </div>
 
-
-
-
-
                 </CardContent>
               </Card>
             </motion.div>
@@ -1244,21 +1395,6 @@ useEffect(() => {
                 </Card>
               </motion.div>
             )}
-
-            
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1278,10 +1414,6 @@ useEffect(() => {
                 </Card>
               </motion.div> 
             )}
-
-
-
-
 
             {/* Upcoming Events */}
             {group.groupEvents && group.groupEvents.length > 0 && (
@@ -1314,12 +1446,57 @@ useEffect(() => {
             )}
           </div>
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
           {/* Sidebar Column */}
 
           {/* Sidebar Column
           <div className="lg:mt-96 lg:sticky lg:top-32 lg:self-start lg:h-[calc(100vh-12rem)] lg:overflow-y-auto scrollbar-hide space-y-6 pr-2"> */}
 
-            <div className="lg:sticky lg:top-40 lg:self-start lg:h-[calc(100vh-10rem)] lg:overflow-y-auto scrollbar-hide space-y-6 pr-2 lg:pt-4">
+        <div className="lg:sticky lg:top-40 lg:self-start lg:h-[calc(100vh-10rem)] lg:overflow-y-auto scrollbar-hide space-y-6 pr-2 lg:pt-4">
 
 
 
@@ -1370,6 +1547,66 @@ useEffect(() => {
 
 {isOrganizer && (
   <>
+
+            {/* Popular Discussions */}
+            {isMember && (mobileActiveTab === "discussions" || window.innerWidth >= 1024) && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.4 }}>
+                <Card id="section-discussions" className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle 
+                        className="flex items-center gap-2 cursor-pointer" 
+                        onClick={() => setShowDiscussionsDropdown(!showDiscussionsDropdown)}
+                      >
+                        <TrendingUp className="h-5 w-5 text-primary" /> 
+                        Popular Discussions
+                      </CardTitle>
+                      <Button 
+                        size="sm" 
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          setShowCreateDiscussionModal(true); 
+                        }}
+                        className="gap-1"
+                      >
+                        <Plus className="h-4 w-4" /> New Post
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  {showDiscussionsDropdown && (
+                    <CardContent className="space-y-3 pt-0">
+                      {discussions.length > 0 ? (
+                        discussions.map((topic) => (
+                          <div
+                            key={topic.id}
+                            className="p-4 border rounded-lg hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => {
+                              // TODO: Replace with real route to discussion detail page
+                              // navigate(`/groups/${id}/discussions/${topic.id}`);
+                              toast.info("Discussion details", { 
+                                description: `${topic.title} (Detail page route pending)` 
+                              });
+                            }}
+                          >
+                            <p className="font-medium text-sm">{topic.title}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{topic.replies} replies • {topic.trending ? "🔥 Trending" : "💬 Active"}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-6">
+                          <MessageSquare className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                          <p className="text-sm text-muted-foreground">No discussions yet</p>
+                          <Button variant="link" size="sm" onClick={() => setShowCreateDiscussionModal(true)}>
+                            Start the first one
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  )}
+                </Card>
+              </motion.div>
+            )}
+
     {/* Members Card */}
     <Card className="shadow-sm">
       <CardHeader className="pb-3">
@@ -1435,7 +1672,6 @@ useEffect(() => {
   </>
 )}
 
-
             {/* Pending Requests */}
             {isOrganizer && (
               <Card className={pendingRequests.length > 0 ? "border-yellow-500/50 shadow-sm" : "shadow-sm"}>
@@ -1455,9 +1691,6 @@ useEffect(() => {
                 </CardContent>
               </Card>
             )}
-
-
-
 
 
 
@@ -1518,38 +1751,6 @@ useEffect(() => {
               </motion.div>
             )}
 
-            {/* Popular Discussions */}
-            {isMember && (mobileActiveTab === "discussions" || window.innerWidth >= 1024) && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.4 }}>
-                <Card id="section-discussions" className="shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center justify-between cursor-pointer" onClick={() => setShowDiscussionsDropdown(!showDiscussionsDropdown)}>
-                      <span className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary" /> Popular Discussions</span>
-                      {showDiscussionsDropdown ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                    </CardTitle>
-                  </CardHeader>
-                  {showDiscussionsDropdown && (
-                    <CardContent className="space-y-3 pt-0">
-                      {discussions.length > 0 ? (
-                        discussions.map((topic) => (
-                          <div
-                            key={topic.id}
-                            className="p-4 border rounded-lg hover:bg-muted cursor-pointer transition-colors"
-                            onClick={() => alert(`Opening discussion: ${topic.title}`)}
-                          >
-                            <p className="font-medium text-sm">{topic.title}</p>
-                            <p className="text-xs text-muted-foreground mt-1">{topic.replies} replies • {topic.trending ? "🔥 Trending" : "💬 Active"}</p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-sm text-muted-foreground text-center py-4">No discussions yet</p>
-                      )}
-                    </CardContent>
-                  )}
-                </Card>
-              </motion.div>
-            )}
-
             {/* Photo Gallery */}
             {isMember && (mobileActiveTab === "gallery" || window.innerWidth >= 1024) && (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.5 }}>
@@ -1588,13 +1789,10 @@ useEffect(() => {
                   </CardContent>
                 </Card>
               </motion.div>
-            )}
-
-
+            )}    
            
            
-           
-                          {/* Share Card */}
+                {/* Share Card */}
             <Card className="shadow-sm">
               <CardHeader className="pb-3"><CardTitle>Share Group</CardTitle></CardHeader>
               <CardContent className="pt-0">
@@ -1643,24 +1841,61 @@ useEffect(() => {
               </CardContent>
             </Card>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
           </div>
         </div>
       </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
       {/* Back to Top Button */}
       {showBackToTop && (
@@ -1671,6 +1906,59 @@ useEffect(() => {
         >
           <ArrowUp className="h-5 w-5" />
         </Button>
+      )}
+
+
+      {/* Create Discussion Modal */}
+      {showCreateDiscussionModal && isMember && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <CardHeader className="sticky top-0 bg-card border-b z-10 py-4">
+              <div className="flex justify-between items-center">
+                <CardTitle>Create Discussion</CardTitle>
+                <Button variant="ghost" size="icon" onClick={() => setShowCreateDiscussionModal(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-4">
+              <div className="space-y-2">
+                <Label>Title *</Label>
+                <Input
+                  value={newDiscussion.title}
+                  onChange={(e) => setNewDiscussion(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="What's on your mind?"
+                  maxLength={100}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Content</Label>
+                <Textarea
+                  value={newDiscussion.content}
+                  onChange={(e) => setNewDiscussion(prev => ({ ...prev, content: e.target.value }))}
+                  placeholder="Share details, ask a question, or start a conversation..."
+                  rows={6}
+                  maxLength={2000}
+                />
+                <p className="text-xs text-muted-foreground text-right">
+                  {newDiscussion.content.length}/2000
+                </p>
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button variant="outline" onClick={() => setShowCreateDiscussionModal(false)} disabled={creatingDiscussion}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleCreateDiscussion} 
+                  disabled={creatingDiscussion || !newDiscussion.title.trim()}
+                >
+                  {creatingDiscussion ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Post Discussion
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Settings Modal */}

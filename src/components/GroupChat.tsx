@@ -3,7 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Send, Loader2, AlertCircle, Paperclip, X, FileText, Image as ImageIcon } from "lucide-react";
+import { Send, Loader2, AlertCircle, Paperclip, X, FileText, Image as ImageIcon, MoreHorizontal } from "lucide-react";
+import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface GroupMessage {
   id: number;
@@ -28,11 +35,20 @@ interface GroupMessage {
 interface GroupChatProps {
   groupId: number;
   currentUserId?: number;
+  isOrganizer?: boolean;
+}
+
+// ✅ TypeScript declarations for window extensions
+declare global {
+  interface Window {
+    promoteMessageToDiscussion?: (messageId: number, content: string) => Promise<void>;
+    prefillDiscussionForm?: (data: { prefillTitle: string; prefillContent: string }) => void;
+  }
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5260/api";
 
-const GroupChat = ({ groupId, currentUserId }: GroupChatProps) => {
+const GroupChat = ({ groupId, currentUserId, isOrganizer = false }: GroupChatProps) => {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -50,27 +66,14 @@ const GroupChat = ({ groupId, currentUserId }: GroupChatProps) => {
     return () => clearInterval(interval);
   }, [groupId]);
 
-  // useEffect(() => {
-  //   messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  // }, [messages]);
-
   const isInitialLoad = useRef(true);
 
   useEffect(() => {
-    // Skip auto-scroll on initial load to prevent page jump
     if (isInitialLoad.current) {
       isInitialLoad.current = false;
       return;
     }
-    // Only auto-scroll to bottom for NEW messages after initial load
-   // messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-
-
-
-
-
 
   const fetchMessages = async () => {
     try {
@@ -196,6 +199,32 @@ const GroupChat = ({ groupId, currentUserId }: GroupChatProps) => {
         const result = await response.json();
         
         if (result.isSuccess) {
+          // ✅ 2025 Best Practice: Suggest Discussion for substantive content
+          const messageContent = newMessage.trim();
+          const isLongOrImportant = messageContent.length > 180 || 
+            /ticket|refund|question|faq|how do|where is|when does|policy|rule/i.test(messageContent);
+          
+          if (isLongOrImportant) {
+            toast.info("💡 Pro tip", {
+              description: "For questions or important info, create a Discussion post so others can find it later.",
+              action: {
+                label: "Create Post",
+                onClick: () => {
+                  if (typeof window !== "undefined") {
+                    const event = new CustomEvent("switchToDiscussions", { 
+                      detail: { 
+                        prefillTitle: messageContent.slice(0, 60) + (messageContent.length > 60 ? "..." : ""),
+                        prefillContent: messageContent 
+                      } 
+                    });
+                    window.dispatchEvent(event);
+                  }
+                }
+              },
+              duration: 7000
+            });
+          }
+          
           setNewMessage("");
           setSelectedFile(null);
           setFilePreview(null);
@@ -307,7 +336,7 @@ const GroupChat = ({ groupId, currentUserId }: GroupChatProps) => {
           return (
             <div
               key={message.id}
-              className={`flex gap-3 ${isOwn ? "flex-row-reverse" : ""}`}
+              className={`flex gap-3 group ${isOwn ? "flex-row-reverse" : ""}`}
             >
               <Avatar className="h-8 w-8 flex-shrink-0">
                 <AvatarImage src={message.sender.profilePicture} />
@@ -322,15 +351,43 @@ const GroupChat = ({ groupId, currentUserId }: GroupChatProps) => {
                     ? "bg-primary text-primary-foreground" 
                     : "bg-muted text-foreground"
                 }`}>
-                  {!isOwn && (
-                    <p className="text-xs font-medium mb-1">
-                      {message.sender.firstName} {message.sender.lastName}
-                    </p>
-                  )}
-                  {message.content && (
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                  )}
-                  {message.attachment && renderAttachment(message.attachment)}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      {!isOwn && (
+                        <p className="text-xs font-medium mb-1">
+                          {message.sender.firstName} {message.sender.lastName}
+                        </p>
+                      )}
+                      {message.content && (
+                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      )}
+                      {message.attachment && renderAttachment(message.attachment)}
+                    </div>
+                    {/* ✅ Organizer-only: Promote to Discussion */}
+                    {isOrganizer && window.promoteMessageToDiscussion && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Message actions"
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => window.promoteMessageToDiscussion?.(message.id, message.content)}
+                            className="flex items-center gap-2"
+                          >
+                            <FileText className="h-4 w-4" />
+                            Promote to Discussion
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
                 </div>
                 <p className={`text-xs text-muted-foreground mt-1 ${
                   isOwn ? "text-right" : ""
